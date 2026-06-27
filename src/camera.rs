@@ -18,6 +18,7 @@ pub struct CameraUniform {
     pub eye_position: [f32; 4],
 }
 
+#[derive(Default)]
 pub struct CameraController {
     pub speed: f32,
     pub sensitivity: f32,
@@ -28,6 +29,7 @@ pub struct CameraController {
     pub is_right_pressed: bool,
     pub is_up_pressed: bool,
     pub is_down_pressed: bool,
+    pub is_dash_pressed: bool,
 }
 
 impl Camera {
@@ -100,13 +102,7 @@ impl CameraController {
         Self {
             speed,
             sensitivity,
-            velocity_y: 0.0,
-            is_forward_pressed: false,
-            is_backward_pressed: false,
-            is_left_pressed: false,
-            is_right_pressed: false,
-            is_up_pressed: false,
-            is_down_pressed: false,
+            ..Default::default()
         }
     }
 
@@ -133,6 +129,10 @@ impl CameraController {
                 true
             }
             winit::keyboard::KeyCode::ShiftLeft | winit::keyboard::KeyCode::ShiftRight => {
+                self.is_dash_pressed = pressed;
+                true
+            }
+            winit::keyboard::KeyCode::ControlLeft | winit::keyboard::KeyCode::ControlRight => {
                 self.is_down_pressed = pressed;
                 true
             }
@@ -186,7 +186,7 @@ impl CameraController {
         if on_ground {
             self.velocity_y = 0.0;
             if self.is_up_pressed {
-                self.velocity_y = 6.5; // ジャンプ初期速度
+                self.velocity_y = 7.5; // ジャンプ初期速度
             }
         } else {
             // 空中では重力加速度を適用

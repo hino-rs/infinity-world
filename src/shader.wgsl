@@ -24,7 +24,6 @@ struct VsOutSky {
 @vertex
 fn vs_main(
     @location(0) pos: vec3f,
-    @location(1) color: vec3f,
     @location(2) instance_pos: vec3f, // インスタンスバッファから渡される各立方体の位置
     @location(3) instance_type: u32,
 ) -> VsOut {

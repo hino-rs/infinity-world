@@ -1,6 +1,7 @@
 mod camera;
 mod game;
 mod state;
+mod terrain;
 
 use std::sync::Arc;
 use std::time::Instant;

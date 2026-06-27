@@ -1,14 +1,17 @@
 use crate::{
     camera::{Camera, CameraController, CameraUniform},
     game::{self, BlockType, InstanceRaw},
+    terrain::create_terrain,
 };
+
 use std::sync::Arc;
 use web_time::Instant;
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
-const CHUNK_SIZE: usize = 16;
-const CHUNK_AREA: usize = CHUNK_SIZE * CHUNK_SIZE;
+pub const CHUNK_SIZE: usize = 16;
+pub const CHUNK_AREA: usize = CHUNK_SIZE * CHUNK_SIZE;
+pub const MAX_HEIGHT: usize = 256;
 
 /// レンダリング処理全体の状態を管理する構造体。
 pub struct State {
@@ -45,7 +48,7 @@ pub struct State {
     num_instances: u32,
     instances: Vec<InstanceRaw>,
 
-    blocks: [[[BlockType; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
+    blocks: [[[BlockType; CHUNK_SIZE]; MAX_HEIGHT]; CHUNK_SIZE],
 
     pub camera: Camera,
     camera_uniform: CameraUniform,
@@ -253,33 +256,7 @@ impl State {
                 immediate_size: 0,
             });
 
-        let mut blocks = [[[BlockType::Air; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
-        let mut instances = Vec::new();
-        for x in 0..CHUNK_SIZE {
-            for y in 0..CHUNK_SIZE {
-                for z in 0..CHUNK_SIZE {
-                    // Y = 0 (最下層) は必ず地面にし、それ以上は30%の確率でランダム配置
-                    let is_solid = rand::random_bool(0.3) || y == 0;
-                    if is_solid {
-                        let block = if y == 0 {
-                            BlockType::Grass
-                        } else if rand::random_bool(0.5) {
-                            BlockType::Stone
-                        } else {
-                            BlockType::Dirt
-                        };
-                        blocks[x][y][z] = block;
-                        let world_x = (x * 2) as f32 - 32.0;
-                        let world_y = (y * 2) as f32 - 32.0;
-                        let world_z = (z * 2) as f32 - 32.0;
-                        instances.push(InstanceRaw {
-                            position: [world_x, world_y, world_z],
-                            block_type: block as u32,
-                        });
-                    }
-                }
-            }
-        }
+        let (instances, blocks) = create_terrain();
 
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Instance Buffer"),
@@ -311,7 +288,7 @@ impl State {
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE), // 色をそのまま置き換える
+                    blend: Some(wgpu::BlendState::REPLACE), 
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: Default::default(),
@@ -319,7 +296,7 @@ impl State {
 
             // プリミティブ形状の設定
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList, // 三角形リストとして描画
+                topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw, // 反時計回りを表面とする
                 cull_mode: Some(wgpu::Face::Back), // 裏面カリングを有効化（見えない裏面を描画しない）
@@ -423,20 +400,22 @@ impl State {
         let foot_z = self.camera.eye.z;
 
         // ワールド座標をグリッドのインデックスに変換
-        let gx = ((foot_x + 33.0) / 2.0).floor() as i32;
-        let gz = ((foot_z + 33.0) / 2.0).floor() as i32;
+        let gx = (foot_x).floor() as i32;
+        let gz = (foot_z).floor() as i32;
 
         let mut on_ground = false;
         let mut ground_y = -32.0; // デフォルトの最低地上高
 
+        println!("|{foot_x:.0}|{foot_y:.0}|{foot_z:.0}|GX:{gx}|GZ:{gz}|");
         if gx >= 0 && gx < CHUNK_SIZE as i32 && gz >= 0 && gz < CHUNK_SIZE as i32 {
-            let check_gy = ((foot_y + 33.0) / 2.0).floor() as i32;
+            let check_gy = foot_y.floor() as i32;
             let mut found = false;
 
             // 足元から下方向へ向かって、最初の非空気ブロックを探す
             for gy in (0..=check_gy.clamp(0, CHUNK_SIZE as i32 - 1)).rev() {
+                println!("{:?}", self.blocks[gx as usize][gy as usize][gz as usize]);
                 if self.blocks[gx as usize][gy as usize][gz as usize] != BlockType::Air {
-                    let block_top = gy as f32 * 2.0 - 31.0; // ブロックの上面座標
+                    let block_top = gy as f32; // ブロックの上面座標
                     ground_y = block_top;
 
                     if foot_y <= block_top + 0.1 {
@@ -484,19 +463,6 @@ impl State {
                 Self::create_depth_texture(&self.device, &self.config);
             self.depth_texture = depth_texture;
             self.depth_view = depth_view;
-        }
-    }
-
-    // 真下のブロックが空気以外か
-    pub fn is_on_ground(&self, x: usize, y: usize, z: usize) -> bool {
-        if z == 0 {
-            return false;
-        }
-        let index = x * CHUNK_AREA + y * CHUNK_SIZE + (z - 1);
-        if self.instances[index].block_type == BlockType::Air as u32 {
-            true
-        } else {
-            false
         }
     }
 

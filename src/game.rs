@@ -12,8 +12,6 @@ pub enum BlockType {
 pub struct Vertex {
     /// 3次元空間における位置座標 [x, y, z]
     pub position: [f32; 3],
-    /// 頂点の色情報 [r, g, b]
-    pub color: [f32; 3],
 }
 
 impl Vertex {
@@ -33,12 +31,6 @@ impl Vertex {
                     shader_location: 0, // shader.wgsl 内の @location(0) に対応
                     format: wgpu::VertexFormat::Float32x3,
                 },
-                // location(1): color フィールド (Float32x3 = 12バイト)
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress, // position の後ろに配置
-                    shader_location: 1, // shader.wgsl 内の @location(1) に対応
-                    format: wgpu::VertexFormat::Float32x3,
-                },
             ],
         }
     }
@@ -46,38 +38,14 @@ impl Vertex {
 
 /// 立方体の8個の角頂点
 pub const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-1.0, -1.0, -1.0],
-        color: [0.0, 0.0, 0.0],
-    }, // 0: 左下奥
-    Vertex {
-        position: [1.0, -1.0, -1.0],
-        color: [1.0, 0.0, 0.0],
-    }, // 1: 右下奥
-    Vertex {
-        position: [1.0, 1.0, -1.0],
-        color: [1.0, 1.0, 0.0],
-    }, // 2: 右上奥
-    Vertex {
-        position: [-1.0, 1.0, -1.0],
-        color: [0.0, 1.0, 0.0],
-    }, // 3: 左上奥
-    Vertex {
-        position: [-1.0, -1.0, 1.0],
-        color: [0.0, 0.0, 1.0],
-    }, // 4: 左下手前
-    Vertex {
-        position: [1.0, -1.0, 1.0],
-        color: [1.0, 0.0, 1.0],
-    }, // 5: 右下手前
-    Vertex {
-        position: [1.0, 1.0, 1.0],
-        color: [1.0, 1.0, 1.0],
-    }, // 6: 右上手前
-    Vertex {
-        position: [-1.0, 1.0, 1.0],
-        color: [0.0, 1.0, 1.0],
-    }, // 7: 左上手前
+    Vertex { position: [-0.5, -0.5, -0.5] }, // 0: 左下奥
+    Vertex { position: [0.5, -0.5, -0.5] },  // 1: 右下奥
+    Vertex { position: [0.5, 0.5, -0.5] },   // 2: 右上奥
+    Vertex { position: [-0.5, 0.5, -0.5] },  // 3: 左上奥
+    Vertex { position: [-0.5, -0.5, 0.5] },  // 4: 左下手前
+    Vertex { position: [0.5, -0.5, 0.5] },   // 5: 右下手前
+    Vertex { position: [0.5, 0.5, 0.5] },    // 6: 右上手前
+    Vertex { position: [-0.5, 0.5, 0.5] },   // 7: 左上手前
 ];
 
 /// 3つの頂点インデックスの組み合わせによって、立方体の各面（ポリゴン）を構成する三角形を定義する。
