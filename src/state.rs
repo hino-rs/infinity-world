@@ -2,7 +2,10 @@ use std::sync::Arc;
 use winit::window::Window;
 use wgpu::util::DeviceExt;
 use web_time::Instant;
-use crate::game;
+use crate::{camera::{Camera, CameraController, CameraUniform}, game::{self, BlockType, InstanceRaw}};
+
+const CHUNK_SIZE: usize = 16;
+const CHUNK_AREA: usize = CHUNK_SIZE * CHUNK_SIZE;
 
 /// レンダリング処理全体の状態を管理する構造体。
 pub struct State {
@@ -32,6 +35,18 @@ pub struct State {
     depth_view: wgpu::TextureView,
     /// アニメーションによる回転角度
     angle: f32,
+
+    instance_buffer: wgpu::Buffer,
+    num_instances: u32,
+    instances: Vec<InstanceRaw>,
+
+    blocks: [[[BlockType; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
+
+    pub camera: Camera,
+    camera_uniform: CameraUniform,
+    camera_buffer: wgpu::Buffer,
+    camera_bind_group: wgpu::BindGroup,
+    pub camera_controller: CameraController,
 
     time: Instant,
 }
@@ -119,6 +134,50 @@ impl State {
         };
         surface.configure(&device, &config);
 
+        let camera = Camera::new(
+            glam::Vec3::new(0.0, 1.8, 5.0),
+            0.0f32.to_radians(),
+            -5.0f32.to_radians(),
+            config.width as f32 / config.height as f32,
+            60.0f32.to_radians(),
+            0.1,
+            100.0,
+        );
+
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_view_proj(&camera);
+
+        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&[camera_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("camera_bind_group_layout"),
+        });
+
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+            label: Some("camera_bind_group"),
+        });
+
+        let camera_controller = CameraController::new(6.0, 0.003); 
+
         // 深度バッファの初期作成
         let (depth_texture, depth_view) = Self::create_depth_texture(&device, &config);
 
@@ -181,9 +240,47 @@ impl State {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[Some(&uniform_bind_group_layout)],
+                bind_group_layouts: &[
+                    Some(&uniform_bind_group_layout),
+                    Some(&camera_bind_group_layout), // バインドグループ1として登録
+                ],
                 immediate_size: 0,
             });
+
+        let mut blocks = [[[BlockType::Air; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut instances = Vec::new();        
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                for z in 0..CHUNK_SIZE {
+                    // Y = 0 (最下層) は必ず地面にし、それ以上は30%の確率でランダム配置
+                    let is_solid = rand::random_bool(0.3) || y == 0;
+                    if is_solid {
+                        let block = if y == 0 {
+                            BlockType::Grass
+                        } else if rand::random_bool(0.5) {
+                            BlockType::Stone
+                        } else {
+                            BlockType::Dirt
+                        };
+                        blocks[x][y][z] = block;
+                        let world_x = (x * 2) as f32 - 32.0;
+                        let world_y = (y * 2) as f32 - 32.0;
+                        let world_z = (z * 2) as f32 - 32.0;
+                        instances.push(InstanceRaw { 
+                            position: [world_x, world_y, world_z],
+                            block_type: block as u32,
+                        });
+                    }
+                } 
+            }
+        }
+
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instance Buffer"),
+            contents: bytemuck::cast_slice(&instances),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let num_instances = instances.len() as u32;
 
         // レンダリングパイプライン全体の作成
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -194,7 +291,10 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[game::Vertex::desc()], // game::Vertex で定義した頂点レイアウトを使用
+                buffers: &[ // game::Vertex で定義した頂点レイアウトを使用
+                    game::Vertex::desc(), // スロット 0: 形状用 (VertexStepMode::Vertex)
+                    InstanceRaw::desc(),  // スロット 1: インスタンス用 (VertexStepMode::Instance)
+                ], 
                 compilation_options: Default::default(),
             },
 
@@ -254,7 +354,67 @@ impl State {
             depth_view,
             angle: 0.0,
             time: Instant::now(),
+            instance_buffer,
+            num_instances,
+            blocks,
+            camera,
+            camera_uniform,
+            camera_buffer,
+            camera_bind_group,
+            camera_controller,
+            instances,
         }
+    }
+
+    pub fn update(&mut self, dt: f32) {
+        // カメラの足元座標
+        let foot_x = self.camera.eye.x;
+        let foot_y = self.camera.eye.y - 1.8;
+        let foot_z = self.camera.eye.z;
+
+        // ワールド座標をグリッドのインデックスに変換
+        let gx = ((foot_x + 33.0) / 2.0).floor() as i32;
+        let gz = ((foot_z + 33.0) / 2.0).floor() as i32;
+
+        let mut on_ground = false;
+        let mut ground_y = -32.0; // デフォルトの最低地上高
+
+        if gx >= 0 && gx < CHUNK_SIZE as i32 && gz >= 0 && gz < CHUNK_SIZE as i32 {
+            let check_gy = ((foot_y + 33.0) / 2.0).floor() as i32;
+            let mut found = false;
+
+            // 足元から下方向へ向かって、最初の非空気ブロックを探す
+            for gy in (0..=check_gy.clamp(0, CHUNK_SIZE as i32 - 1)).rev() {
+                if self.blocks[gx as usize][gy as usize][gz as usize] != BlockType::Air {
+                    let block_top = gy as f32 * 2.0 - 31.0; // ブロックの上面座標
+                    ground_y = block_top;
+                    
+                    if foot_y <= block_top + 0.1 {
+                        on_ground = true;
+                    }
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                if foot_y <= ground_y {
+                    on_ground = true;
+                }
+            }
+        } else {
+            // グリッド外は Y = 0.0 平面を一時的な地面とする
+            ground_y = 0.0;
+            if foot_y <= ground_y {
+                on_ground = true;
+            }
+        }
+
+        // カメラ位置の更新
+        self.camera_controller.update_camera(&mut self.camera, dt, on_ground, ground_y);
+
+        // カメラUniformの更新と書き込み
+        self.camera_uniform.update_view_proj(&self.camera);
+        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
     /// ウィンドウサイズ変更時に呼び出され、描画領域と深度バッファを再構成
@@ -268,6 +428,17 @@ impl State {
             let (depth_texture, depth_view) = Self::create_depth_texture(&self.device, &self.config);
             self.depth_texture = depth_texture;
             self.depth_view = depth_view;
+        }
+    }
+
+    // 真下のブロックが空気以外か
+    pub fn is_on_ground(&self, x: usize, y: usize, z: usize) -> bool {
+        if z == 0 { return false; }
+        let index = x * CHUNK_AREA + y * CHUNK_SIZE + (z - 1);
+        if self.instances[index].block_type == BlockType::Air as u32 {
+            true
+        } else {
+            false
         }
     }
 
@@ -297,27 +468,27 @@ impl State {
         // ビュー行列の計算 (カメラの位置: (0.0, 2.0, 5.0) から原点を見る)
         let view_matrix = glam::Mat4::look_at_lh(
             glam::Vec3::new(
-                self.time.elapsed().as_secs_f32().sin()*5.0,
-                self.time.elapsed().as_secs_f32().sin()+2.0,
-                5.0
+                self.time.elapsed().as_secs_f32().cos()*300.0,
+                64.0,
+                self.time.elapsed().as_secs_f32().sin()*300.0,
             ),
-            glam::Vec3::ZERO,
+            glam::Vec3::new(0.0, 32.0, 0.0),
             glam::Vec3::Y,
         );
 
         // 射影行列の計算 (透視投影、左手系、アスペクト比対応)
         let aspect = self.config.width as f32 / self.config.height as f32;
-        let proj_matrix = glam::Mat4::perspective_lh(f32::to_radians(45.0), aspect, 0.1, 100.0);
+        let proj_matrix = glam::Mat4::perspective_lh(
+            f32::to_radians(45.0), // fov 
+            aspect, 
+            0.1,   // z_near
+            10000.0, // z_far
+        );
 
-        // モデル回転行列の計算
-        let model_matrix = glam::Mat4::from_rotation_y(self.angle) * glam::Mat4::from_rotation_x(self.angle * 0.5);
-
-        // Model * View * Projection 行列を結合してMVP行列を計算
-        let mvp = proj_matrix * view_matrix * model_matrix;
-
-        // 更新したMVP行列をGPU側のUniformバッファに書き込む
+        let model_matrix = glam::Mat4::IDENTITY;
+        let mvp = model_matrix;
         self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[mvp.to_cols_array_2d()]));
-
+        
         // GPUに指示するコマンドエンコーダーの作成
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
@@ -361,11 +532,13 @@ impl State {
             // パイプラインと各種リソースバッファの設定
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]); // スロット0にMVP行列のUniformを設定
+            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);  // スロット1 (カメラ)
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // 頂点バッファの設定
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..)); 
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // インデックスバッファの設定
             
             // インデックス順に従って立方体を描画
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.num_instances);
         }
 
         // コマンドを実行キューに送信

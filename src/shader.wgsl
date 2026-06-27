@@ -1,3 +1,8 @@
+struct CameraUniform {
+    view_proj: mat4x4<f32>,
+};
+@group(1) @binding(0) var<uniform> camera: CameraUniform;
+
 struct Uniforms {
     mvp: mat4x4<f32>,
 };
@@ -13,12 +18,19 @@ struct VsOut {
 fn vs_main(
     @location(0) pos: vec3<f32>,
     @location(1) color: vec3<f32>,
+    @location(2) instance_pos: vec3<f32>, // インスタンスバッファから渡される各立方体の位置
+    @location(3) instance_type: u32,
 ) -> VsOut {
     var out: VsOut;
-    // 3Dのローカル座標を、MVP行列を乗算することで画面のクリップ座標(2D投影)変換
-    out.clip_pos = u.mvp * vec4<f32>(pos, 1.0);
+    // 頂点の基本位置にインスタンスの位置を足してワールド空間での位置にする
+    let world_pos = pos + instance_pos;
+    
+    out.clip_pos = camera.view_proj * vec4<f32>(world_pos, 1.0);
+    // out.color = color;
 
-    out.color = color;
+    if instance_type == 1 {
+        out.color = vec3f(0.4, 0.4, 0.4);
+    }
     return out;
 }
 
