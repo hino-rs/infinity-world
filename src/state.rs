@@ -13,6 +13,9 @@ pub const CHUNK_SIZE: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_SIZE * CHUNK_SIZE;
 pub const MAX_HEIGHT: usize = 256;
 
+// pub type CHUNK_BLOCKS = [[[BlockType; CHUNK_SIZE]; MAX_HEIGHT]; CHUNK_SIZE];
+pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
+
 /// レンダリング処理全体の状態を管理する構造体。
 pub struct State {
     /// 描画対象のウィンドウサーフェス
@@ -48,7 +51,7 @@ pub struct State {
     num_instances: u32,
     instances: Vec<InstanceRaw>,
 
-    blocks: [[[BlockType; CHUNK_SIZE]; MAX_HEIGHT]; CHUNK_SIZE],
+    blocks: ChunkBlocks,
 
     pub camera: Camera,
     camera_uniform: CameraUniform,
@@ -413,8 +416,10 @@ impl State {
 
             // 足元から下方向へ向かって、最初の非空気ブロックを探す
             for gy in (0..=check_gy.clamp(0, CHUNK_SIZE as i32 - 1)).rev() {
-                println!("{:?}", self.blocks[gx as usize][gy as usize][gz as usize]);
-                if self.blocks[gx as usize][gy as usize][gz as usize] != BlockType::Air {
+                let index = (gx * CHUNK_AREA as i32 + gy * CHUNK_SIZE as i32 + gz) as usize;
+                println!("{:?}", self.blocks[index]);
+                
+                if self.blocks[index] != BlockType::Air {
                     let block_top = gy as f32; // ブロックの上面座標
                     ground_y = block_top;
 
