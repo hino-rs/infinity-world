@@ -1,9 +1,9 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum BlockType {
-    Air   = 0,
+    Air = 0,
     Stone = 1,
-    Dirt  = 2,
+    Dirt = 2,
     Grass = 3,
 }
 
@@ -29,7 +29,7 @@ impl Vertex {
             attributes: &[
                 // location(0): position フィールド (Float32x3 = 12バイト)
                 wgpu::VertexAttribute {
-                    offset: 0, // 構造体の先頭から配置
+                    offset: 0,          // 構造体の先頭から配置
                     shader_location: 0, // shader.wgsl 内の @location(0) に対応
                     format: wgpu::VertexFormat::Float32x3,
                 },
@@ -46,25 +46,49 @@ impl Vertex {
 
 /// 立方体の8個の角頂点
 pub const VERTICES: &[Vertex] = &[
-    Vertex { position: [-1.0, -1.0, -1.0], color: [0.0, 0.0, 0.0] }, // 0: 左下奥
-    Vertex { position: [ 1.0, -1.0, -1.0], color: [1.0, 0.0, 0.0] }, // 1: 右下奥
-    Vertex { position: [ 1.0,  1.0, -1.0], color: [1.0, 1.0, 0.0] }, // 2: 右上奥
-    Vertex { position: [-1.0,  1.0, -1.0], color: [0.0, 1.0, 0.0] }, // 3: 左上奥
-    Vertex { position: [-1.0, -1.0,  1.0], color: [0.0, 0.0, 1.0] }, // 4: 左下手前
-    Vertex { position: [ 1.0, -1.0,  1.0], color: [1.0, 0.0, 1.0] }, // 5: 右下手前
-    Vertex { position: [ 1.0,  1.0,  1.0], color: [1.0, 1.0, 1.0] }, // 6: 右上手前
-    Vertex { position: [-1.0,  1.0,  1.0], color: [0.0, 1.0, 1.0] }, // 7: 左上手前
+    Vertex {
+        position: [-1.0, -1.0, -1.0],
+        color: [0.0, 0.0, 0.0],
+    }, // 0: 左下奥
+    Vertex {
+        position: [1.0, -1.0, -1.0],
+        color: [1.0, 0.0, 0.0],
+    }, // 1: 右下奥
+    Vertex {
+        position: [1.0, 1.0, -1.0],
+        color: [1.0, 1.0, 0.0],
+    }, // 2: 右上奥
+    Vertex {
+        position: [-1.0, 1.0, -1.0],
+        color: [0.0, 1.0, 0.0],
+    }, // 3: 左上奥
+    Vertex {
+        position: [-1.0, -1.0, 1.0],
+        color: [0.0, 0.0, 1.0],
+    }, // 4: 左下手前
+    Vertex {
+        position: [1.0, -1.0, 1.0],
+        color: [1.0, 0.0, 1.0],
+    }, // 5: 右下手前
+    Vertex {
+        position: [1.0, 1.0, 1.0],
+        color: [1.0, 1.0, 1.0],
+    }, // 6: 右上手前
+    Vertex {
+        position: [-1.0, 1.0, 1.0],
+        color: [0.0, 1.0, 1.0],
+    }, // 7: 左上手前
 ];
 
 /// 3つの頂点インデックスの組み合わせによって、立方体の各面（ポリゴン）を構成する三角形を定義する。
 /// CCW (反時計回り) が表を向くように設定する。
 pub const INDICES: &[u16] = &[
-    0,1,2, 0,2,3,  // 後ろ面 (Z = -1.0)
-    4,6,5, 4,7,6,  // 前面 (Z = 1.0)
-    0,4,5, 0,5,1,  // 下面 (Y = -1.0)
-    3,2,6, 3,6,7,  // 上面 (Y = 1.0)
-    0,3,7, 0,7,4,  // 左面 (X = -1.0)
-    1,5,6, 1,6,2,  // 右面 (X = 1.0)
+    0, 1, 2, 0, 2, 3, // 後ろ面 (Z = -1.0)
+    4, 6, 5, 4, 7, 6, // 前面 (Z = 1.0)
+    0, 4, 5, 0, 5, 1, // 下面 (Y = -1.0)
+    3, 2, 6, 3, 6, 7, // 上面 (Y = 1.0)
+    0, 3, 7, 0, 7, 4, // 左面 (X = -1.0)
+    1, 5, 6, 1, 6, 2, // 右面 (X = 1.0)
 ];
 
 #[repr(C)]
@@ -90,7 +114,7 @@ impl InstanceRaw {
                     offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 3,
                     format: wgpu::VertexFormat::Uint32,
-               },
+                },
             ],
         }
     }

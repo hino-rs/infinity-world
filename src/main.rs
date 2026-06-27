@@ -1,14 +1,14 @@
-mod state;
-mod game;
 mod camera;
+mod game;
+mod state;
 
 use std::sync::Arc;
 use std::time::Instant;
 use winit::{
-    event_loop::EventLoop,
     application::ApplicationHandler,
     event::WindowEvent,
     event_loop::ActiveEventLoop,
+    event_loop::EventLoop,
     window::{Window, WindowId},
 };
 
@@ -44,11 +44,13 @@ impl ApplicationHandler for App {
         let window = Arc::new(
             event_loop
                 .create_window(Window::default_attributes())
-                .unwrap()
+                .unwrap(),
         );
 
         // マウスのキャプチャ（FPSゲームのように画面に固定＆非表示化）
-        window.set_cursor_grab(winit::window::CursorGrabMode::Confined).ok();
+        window
+            .set_cursor_grab(winit::window::CursorGrabMode::Confined)
+            .ok();
         window.set_cursor_visible(false);
 
         let state = pollster::block_on(State::new(Arc::clone(&window)));
@@ -69,16 +71,22 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
 
-            WindowEvent::KeyboardInput { event: key_event, .. } => {
+            WindowEvent::KeyboardInput {
+                event: key_event, ..
+            } => {
                 // Escapeキーで終了
-                if key_event.physical_key == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape) {
+                if key_event.physical_key
+                    == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape)
+                {
                     event_loop.exit();
                 }
 
                 // キーボード入力をカメラコントローラーに送る
                 if let Some(state) = &mut self.state {
                     if let winit::keyboard::PhysicalKey::Code(keycode) = key_event.physical_key {
-                        state.camera_controller.process_keyboard(keycode, key_event.state.is_pressed());
+                        state
+                            .camera_controller
+                            .process_keyboard(keycode, key_event.state.is_pressed());
                     }
                 }
             }
@@ -94,13 +102,7 @@ impl ApplicationHandler for App {
                 let dt = now.duration_since(self.last_render_time).as_secs_f32();
                 self.last_render_time = now;
 
-                if let (
-                    Some(window),
-                    Some(state),
-                 ) = (
-                    &mut self.window,
-                    &mut self.state,
-                ) {
+                if let (Some(window), Some(state)) = (&mut self.window, &mut self.state) {
                     state.update(dt); // カメラ状態の更新
                     state.render();
                     window.request_redraw();
@@ -120,7 +122,9 @@ impl ApplicationHandler for App {
         // マウスの相対移動量 (dx, dy) を取得してカメラを回転
         if let winit::event::DeviceEvent::MouseMotion { delta } = event {
             if let Some(state) = &mut self.state {
-                state.camera_controller.process_mouse(delta.0, delta.1, &mut state.camera);
+                state
+                    .camera_controller
+                    .process_mouse(delta.0, delta.1, &mut state.camera);
             }
         }
     }

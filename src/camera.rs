@@ -1,35 +1,45 @@
 use glam::{Mat4, Vec3};
 
 pub struct Camera {
-    pub eye:    Vec3, 
-    pub yaw:    f32,  // 水平アングル
-    pub pitch:  f32,  // 垂直アングル
+    pub eye: Vec3,
+    pub yaw: f32,   // 水平アングル
+    pub pitch: f32, // 垂直アングル
     pub aspect: f32,
-    pub fovy:   f32,
-    pub znear:  f32,
-    pub zfar:   f32,
+    pub fovy: f32,
+    pub znear: f32,
+    pub zfar: f32,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
     pub view_proj: [[f32; 4]; 4],
+    pub inv_view_proj: [[f32; 4]; 4],
+    pub eye_position: [f32; 4],
 }
 
 pub struct CameraController {
-    pub speed:               f32,
-    pub sensitivity:         f32,
-    pub velocity_y:          f32,
-    pub is_forward_pressed:  bool,
+    pub speed: f32,
+    pub sensitivity: f32,
+    pub velocity_y: f32,
+    pub is_forward_pressed: bool,
     pub is_backward_pressed: bool,
-    pub is_left_pressed:     bool,
-    pub is_right_pressed:    bool,
-    pub is_up_pressed:       bool,
-    pub is_down_pressed:     bool,
+    pub is_left_pressed: bool,
+    pub is_right_pressed: bool,
+    pub is_up_pressed: bool,
+    pub is_down_pressed: bool,
 }
 
 impl Camera {
-    pub fn new(eye: Vec3, yaw: f32, pitch: f32, aspect: f32, fovy: f32, znear: f32, zfar: f32) -> Self {
+    pub fn new(
+        eye: Vec3,
+        yaw: f32,
+        pitch: f32,
+        aspect: f32,
+        fovy: f32,
+        znear: f32,
+        zfar: f32,
+    ) -> Self {
         Self {
             eye,
             yaw,
@@ -50,7 +60,8 @@ impl Camera {
             cos_pitch * sin_yaw, // 上下に向くほど左右成分を弱める
             sin_pitch,
             -cos_pitch * cos_yaw,
-        ).normalize()
+        )
+        .normalize()
     }
 
     pub fn build_view_projection_matrix(&self) -> Mat4 {
@@ -69,11 +80,18 @@ impl CameraUniform {
     pub fn new() -> Self {
         Self {
             view_proj: Mat4::IDENTITY.to_cols_array_2d(),
+            inv_view_proj: Mat4::IDENTITY.to_cols_array_2d(),
+            eye_position: [0.0; 4],
         }
     }
 
     pub fn update_view_proj(&mut self, camera: &Camera) {
-        self.view_proj = camera.build_view_projection_matrix().to_cols_array_2d();
+        let view_proj = camera.build_view_projection_matrix();
+        self.view_proj = view_proj.to_cols_array_2d();
+        // 逆行列
+        self.inv_view_proj = view_proj.inverse().to_cols_array_2d();
+        // カメラの位置を4次元配列へ拡張
+        self.eye_position = [camera.eye.x, camera.eye.y, camera.eye.z, 1.0];
     }
 }
 
