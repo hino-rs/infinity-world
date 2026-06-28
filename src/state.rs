@@ -41,11 +41,7 @@ pub struct State {
     uniform_bind_group: wgpu::BindGroup,
     /// 3Dの前後関係を正しく描画するための深度バッファテクスチャ
     depth_texture: wgpu::Texture,
-    /// 深度バッファテクスチャのビュー
     depth_view: wgpu::TextureView,
-    /// アニメーションによる回転角度
-    angle: f32,
-
     blocks: ChunkBlocks,
 
     pub camera: Camera,
@@ -239,7 +235,7 @@ impl State {
                 immediate_size: 0,
             });
 
-        let (_, blocks) = create_terrain();
+        let blocks = create_terrain();
         let (chunk_vertices, chunk_indices) = terrain::build_chunk_mesh(&blocks);
 
         // 頂点バッファの作成
@@ -369,7 +365,6 @@ impl State {
             uniform_bind_group,
             depth_texture,
             depth_view,
-            angle: 0.0,
             time: Instant::now(),
             blocks,
             camera,
@@ -483,26 +478,6 @@ impl State {
 
         // アニメーション角度の更新
         // self.angle += 0.01;
-
-        // ビュー行列の計算 (カメラの位置: (0.0, 2.0, 5.0) から原点を見る)
-        let view_matrix = glam::Mat4::look_at_lh(
-            glam::Vec3::new(
-                self.time.elapsed().as_secs_f32().cos() * 300.0,
-                64.0,
-                self.time.elapsed().as_secs_f32().sin() * 300.0,
-            ),
-            glam::Vec3::new(0.0, 32.0, 0.0),
-            glam::Vec3::Y,
-        );
-
-        // 射影行列の計算 (透視投影、左手系、アスペクト比対応)
-        let aspect = self.config.width as f32 / self.config.height as f32;
-        let proj_matrix = glam::Mat4::perspective_lh(
-            f32::to_radians(45.0), // fov
-            aspect,
-            0.1,     // z_near
-            10000.0, // z_far
-        );
 
         let model_matrix = glam::Mat4::IDENTITY;
         let mvp = model_matrix;

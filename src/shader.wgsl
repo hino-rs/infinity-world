@@ -27,21 +27,25 @@ fn vs_main(
     @location(0) pos: vec3f,
     @location(1) tex_coords: vec2f,
     @location(2) block_type: u32,
+    @location(3) ao_factor: f32,
 ) -> VsOut {
     var out: VsOut;
     let world_pos = pos;
     out.clip_pos = camera.view_proj * vec4f(world_pos, 1.0);
     out.tex_coords = tex_coords;
 
+    var base_color = vec4f(1.0);
     if block_type == 0u {
-        out.color = vec4f(0.0);
+        base_color = vec4f(0.0);
     } else if block_type == 1u {
-        out.color = vec4f(0.4, 0.4, 0.4, 1.0);
+        base_color = vec4f(0.4, 0.4, 0.4, 1.0);
     } else if block_type == 2u {
-        out.color = vec4f(0.7, 0.45, 0.25, 1.0);
+        base_color = vec4f(0.7, 0.45, 0.25, 1.0);
     } else if block_type == 3u {
-        out.color = vec4f(0.48, 0.55, 0.26, 1.0);
+        base_color = vec4f(0.48, 0.55, 0.26, 1.0);
     }
+
+    out.color = vec4f(base_color.rgb * ao_factor, base_color.a);
     return out;
 }
 
