@@ -231,7 +231,7 @@ impl State {
         // 頂点バッファの作成（立方体の8つの頂点情報）
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(game::VERTICES),
+            contents: bytemuck::cast_slice(game::create_virtices()),
             usage: wgpu::BufferUsages::VERTEX,
         });
 

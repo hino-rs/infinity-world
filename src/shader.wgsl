@@ -14,6 +14,7 @@ struct Uniforms {
 struct VsOut {
     @builtin(position) clip_pos: vec4f,
     @location(0) color: vec4f,
+    @location(1) tex_coords: vec2f,
 };
 
 struct VsOutSky {
@@ -24,14 +25,15 @@ struct VsOutSky {
 @vertex
 fn vs_main(
     @location(0) pos: vec3f,
+    @location(1) tex_coords: vec2f,
     @location(2) instance_pos: vec3f, // インスタンスバッファから渡される各立方体の位置
     @location(3) instance_type: u32,
 ) -> VsOut {
     var out: VsOut;
     // 頂点の基本位置にインスタンスの位置を足してワールド空間での位置にする
     let world_pos = pos + instance_pos;
-    
     out.clip_pos = camera.view_proj * vec4f(world_pos, 1.0);
+    out.tex_coords = tex_coords;
 
     if instance_type == 0 {
         out.color = vec4f(0.0);
@@ -47,7 +49,9 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4f {
-    return in.color;
+    var color = in.color;
+
+    return color;
 }
 
 @vertex
@@ -74,6 +78,7 @@ fn fs_sky(in: VsOutSky) -> @location(0) vec4f {
     let view_dir = normalize(in.view_dir);
     let sun_dir = normalize(vec3f(1.0));
     let sky_color = render_sky(view_dir, sun_dir);
+
     return vec4f(sky_color, 1.0);
 }
 

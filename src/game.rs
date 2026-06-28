@@ -12,6 +12,7 @@ pub enum BlockType {
 pub struct Vertex {
     /// 3次元空間における位置座標 [x, y, z]
     pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
 }
 
 impl Vertex {
@@ -31,32 +32,67 @@ impl Vertex {
                     shader_location: 0, // shader.wgsl 内の @location(0) に対応
                     format: wgpu::VertexFormat::Float32x3,
                 },
+                // location(1): UV座標 (Float32x2 = 8バイト)
+                wgpu::VertexAttribute {
+                    offset: 12,
+                    shader_location: 1, // shader.wgsl 内の @location(1)
+                    format: wgpu::VertexFormat::Float32x2,
+                },
             ],
         }
     }
 }
 
-/// 立方体の8個の角頂点
-pub const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.5, -0.5, -0.5] }, // 0: 左下奥
-    Vertex { position: [0.5, -0.5, -0.5] },  // 1: 右下奥
-    Vertex { position: [0.5, 0.5, -0.5] },   // 2: 右上奥
-    Vertex { position: [-0.5, 0.5, -0.5] },  // 3: 左上奥
-    Vertex { position: [-0.5, -0.5, 0.5] },  // 4: 左下手前
-    Vertex { position: [0.5, -0.5, 0.5] },   // 5: 右下手前
-    Vertex { position: [0.5, 0.5, 0.5] },    // 6: 右上手前
-    Vertex { position: [-0.5, 0.5, 0.5] },   // 7: 左上手前
-];
 
-/// 3つの頂点インデックスの組み合わせによって、立方体の各面（ポリゴン）を構成する三角形を定義する。
-/// CCW (反時計回り) が表を向くように設定する。
+pub fn calc_ao(side1: bool, side2: bool, corner: bool) -> u8 {
+    if side1 && side2 {
+        return 0;
+    }
+    3 - (side1 as u8 + side2 as u8 + corner as u8)
+}
+
+pub fn create_virtices() -> &'static [Vertex] {
+    &[
+        // 後ろ面 (Z = -0.5)
+        Vertex { position: [-0.5, -0.5, -0.5], tex_coords: [0.0, 1.0] }, // 0
+        Vertex { position: [ 0.5, -0.5, -0.5], tex_coords: [1.0, 1.0] }, // 1
+        Vertex { position: [ 0.5,  0.5, -0.5], tex_coords: [1.0, 0.0] }, // 2
+        Vertex { position: [-0.5,  0.5, -0.5], tex_coords: [0.0, 0.0] }, // 3
+        // 前面 (Z = 0.5)
+        Vertex { position: [-0.5, -0.5,  0.5], tex_coords: [0.0, 1.0] }, // 4
+        Vertex { position: [ 0.5, -0.5,  0.5], tex_coords: [1.0, 1.0] }, // 5
+        Vertex { position: [ 0.5,  0.5,  0.5], tex_coords: [1.0, 0.0] }, // 6
+        Vertex { position: [-0.5,  0.5,  0.5], tex_coords: [0.0, 0.0] }, // 7
+        // 下面 (Y = -0.5)
+        Vertex { position: [-0.5, -0.5, -0.5], tex_coords: [0.0, 0.0] }, // 8
+        Vertex { position: [ 0.5, -0.5, -0.5], tex_coords: [1.0, 0.0] }, // 9
+        Vertex { position: [ 0.5, -0.5,  0.5], tex_coords: [1.0, 1.0] }, // 10
+        Vertex { position: [-0.5, -0.5,  0.5], tex_coords: [0.0, 1.0] }, // 11
+        // 上面 (Y = 0.5)
+        Vertex { position: [-0.5,  0.5, -0.5], tex_coords: [0.0, 1.0] }, // 12
+        Vertex { position: [ 0.5,  0.5, -0.5], tex_coords: [1.0, 1.0] }, // 13
+        Vertex { position: [ 0.5,  0.5,  0.5], tex_coords: [1.0, 0.0] }, // 14
+        Vertex { position: [-0.5,  0.5,  0.5], tex_coords: [0.0, 0.0] }, // 15
+        // 左面 (X = -0.5)
+        Vertex { position: [-0.5, -0.5, -0.5], tex_coords: [0.0, 1.0] }, // 16
+        Vertex { position: [-0.5,  0.5, -0.5], tex_coords: [0.0, 0.0] }, // 17
+        Vertex { position: [-0.5,  0.5,  0.5], tex_coords: [1.0, 0.0] }, // 18
+        Vertex { position: [-0.5, -0.5,  0.5], tex_coords: [1.0, 1.0] }, // 19
+        // 右面 (X = 0.5)
+        Vertex { position: [ 0.5, -0.5, -0.5], tex_coords: [1.0, 1.0] }, // 20
+        Vertex { position: [ 0.5, -0.5,  0.5], tex_coords: [0.0, 1.0] }, // 21
+        Vertex { position: [ 0.5,  0.5,  0.5], tex_coords: [0.0, 0.0] }, // 22
+        Vertex { position: [ 0.5,  0.5, -0.5], tex_coords: [1.0, 0.0] }, // 23
+    ]    
+}
+
 pub const INDICES: &[u16] = &[
-    0, 1, 2, 0, 2, 3, // 後ろ面 (Z = -1.0)
-    4, 6, 5, 4, 7, 6, // 前面 (Z = 1.0)
-    0, 4, 5, 0, 5, 1, // 下面 (Y = -1.0)
-    3, 2, 6, 3, 6, 7, // 上面 (Y = 1.0)
-    0, 3, 7, 0, 7, 4, // 左面 (X = -1.0)
-    1, 5, 6, 1, 6, 2, // 右面 (X = 1.0)
+    0, 1, 2, 0, 2, 3,       // 後ろ面
+    4, 6, 5, 4, 7, 6,       // 前面
+    8, 11, 10, 8, 10, 9,    // 下面
+    12, 13, 14, 12, 14, 15, // 上面
+    16, 17, 18, 16, 18, 19, // 左面
+    20, 21, 22, 20, 22, 23, // 右面
 ];
 
 #[repr(C)]
