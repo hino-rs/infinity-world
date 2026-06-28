@@ -12,6 +12,7 @@ use winit::window::Window;
 pub const CHUNK_SIZE: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_SIZE * CHUNK_SIZE;
 pub const MAX_HEIGHT: usize = 256;
+pub const WALK_SPEED: f32 = 6.0;
 
 // pub type CHUNK_BLOCKS = [[[BlockType; CHUNK_SIZE]; MAX_HEIGHT]; CHUNK_SIZE];
 pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
@@ -188,7 +189,7 @@ impl State {
             label: Some("camera_bind_group"),
         });
 
-        let camera_controller = CameraController::new(6.0, 0.003);
+        let camera_controller = CameraController::new(WALK_SPEED, 0.003);
 
         // 深度バッファの初期作成
         let (depth_texture, depth_view) = Self::create_depth_texture(&device, &config);

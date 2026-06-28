@@ -1,5 +1,7 @@
 use glam::{Mat4, Vec3};
 
+use crate::state::WALK_SPEED;
+
 pub struct Camera {
     pub eye: Vec3,
     pub yaw: f32,   // 水平アングル
@@ -161,6 +163,12 @@ impl CameraController {
         let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize();
 
         let mut move_dir = Vec3::ZERO;
+
+        if self.is_dash_pressed {
+            self.speed = WALK_SPEED * 1.5;
+        } else {
+            self.speed = WALK_SPEED;
+        }
 
         if self.is_forward_pressed {
             move_dir += forward_ground;
