@@ -127,7 +127,7 @@ impl CameraController {
         let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize();
 
         self.speed = if self.is_dash_pressed {
-            WALK_SPEED * 1.5
+            WALK_SPEED * 5.0
         } else {
             WALK_SPEED
         };

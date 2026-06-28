@@ -14,9 +14,9 @@ use std::collections::VecDeque;
 
 pub const CHUNK_SIZE: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_SIZE * MAX_HEIGHT;
-pub const MAX_HEIGHT: usize = 128;
+pub const MAX_HEIGHT: usize = 256;
 pub const WALK_SPEED: f32 = 6.0;
-pub const RADIUS: i32 = 4;
+pub const RADIUS: i32 = 32;
 pub const PLAYER_HALF_WIDTH: f32 = 0.3; // 横幅の半分（全幅 0.6）
 pub const PLAYER_HEIGHT: f32 = 1.8;     // 身長（足元から目まで）
 
@@ -220,7 +220,7 @@ impl State {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::AutoNoVsync, // VSync同期
+            present_mode: wgpu::PresentMode::AutoVsync,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -228,13 +228,13 @@ impl State {
         surface.configure(&device, &config);
 
         let camera = Camera::new(
-            glam::Vec3::new(5.0, 40.0, 5.0),
+            glam::Vec3::new(5.0, 100.0, 5.0),
             0.0f32.to_radians(),
             -20.0f32.to_radians(),
             config.width as f32 / config.height as f32,
-            80.0f32.to_radians(),
+            90.0f32.to_radians(),
             0.1,
-            10000.0,
+            (CHUNK_SIZE * RADIUS as usize) as f32 * 1.5,
         );
 
         let mut camera_uniform = CameraUniform::new();
@@ -327,7 +327,6 @@ impl State {
             });
 
         let mut chunks = Vec::new();
-        let mut num_chunks = 0;
         for cx in -RADIUS..=RADIUS {
             for cz in -RADIUS..=RADIUS {
                 let blocks = create_terrain(cx, cz);
@@ -351,8 +350,6 @@ impl State {
                     index_buffer,
                     num_indices: inds.len() as u32,
                 });
-                num_chunks += 1;
-                println!("チャンク{num_chunks}: 生成完了");
             }
         }
 
