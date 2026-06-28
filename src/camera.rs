@@ -32,6 +32,8 @@ pub struct CameraController {
     pub is_up_pressed: bool,
     pub is_down_pressed: bool,
     pub is_dash_pressed: bool,
+    pub on_ground: bool,
+    pub teleport: bool,
 }
 
 impl Camera {
@@ -117,6 +119,53 @@ impl CameraController {
         }
     }
 
+    // 入力と重力から、このフレームの移動量を計算して返す。
+    pub fn compute_move(&mut self, camera: &mut Camera, dt: f32) -> Vec3 {
+        // 地面に水平な前方・右方向（XZ平面）
+        let (sin_yaw, cos_yaw) = camera.yaw.sin_cos();
+        let forward_ground = Vec3::new(sin_yaw, 0.0, -cos_yaw).normalize();
+        let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize();
+
+        self.speed = if self.is_dash_pressed {
+            WALK_SPEED * 1.5
+        } else {
+            WALK_SPEED
+        };
+
+        let mut move_dir = Vec3::ZERO;
+        if self.is_forward_pressed  { move_dir += forward_ground; }
+        if self.is_backward_pressed { move_dir -= forward_ground; }
+        if self.is_right_pressed    { move_dir += right_ground; }
+        if self.is_left_pressed     { move_dir -= right_ground; }
+        
+        if self.teleport {
+            camera.eye.x = 0.0;
+            camera.eye.z = 0.0;
+            camera.eye.y = 300.0;
+        }
+
+        // 水平移動量（斜めも同じ速さになるよう正規化）
+        let horizontal = if move_dir != Vec3::ZERO {
+            move_dir.normalize() * self.speed * dt
+        } else {
+            Vec3::ZERO
+        };
+
+        // 縦方向：接地中はジャンプ受付、空中は重力
+        if self.on_ground {
+            self.velocity_y = 0.0;
+            if self.is_up_pressed {
+                self.velocity_y = 7.5; // ジャンプ初速
+            }
+        } else {
+            let gravity = 18.0;
+            self.velocity_y -= gravity * dt;
+        }
+        let vertical = self.velocity_y * dt;
+
+        Vec3::new(horizontal.x, vertical, horizontal.z)
+    }
+
     pub fn process_keyboard(&mut self, key: winit::keyboard::KeyCode, pressed: bool) -> bool {
         match key {
             winit::keyboard::KeyCode::KeyW | winit::keyboard::KeyCode::ArrowUp => {
@@ -147,6 +196,10 @@ impl CameraController {
                 self.is_down_pressed = pressed;
                 true
             }
+            winit::keyboard::KeyCode::KeyT => {
+                self.teleport = pressed;
+                true
+            }
             _ => false,
         }
     }
@@ -162,63 +215,6 @@ impl CameraController {
             camera.pitch = -limit;
         } else if camera.pitch > limit {
             camera.pitch = limit;
-        }
-    }
-
-    pub fn update_camera(&mut self, camera: &mut Camera, dt: f32, on_ground: bool, ground_y: f32) {
-        // 地面に水平な方向ベクトル(XZ平面)を算出し、傾きにかかわらず水平に移動させる
-        let (sin_yaw, cos_yaw) = camera.yaw.sin_cos();
-        let forward_ground = Vec3::new(sin_yaw, 0.0, -cos_yaw).normalize();
-        let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize();
-
-        let mut move_dir = Vec3::ZERO;
-
-        if self.is_dash_pressed {
-            self.speed = WALK_SPEED * 1.5;
-        } else {
-            self.speed = WALK_SPEED;
-        }
-
-        if self.is_forward_pressed {
-            move_dir += forward_ground;
-        }
-        if self.is_backward_pressed {
-            move_dir -= forward_ground;
-        }
-        if self.is_right_pressed {
-            move_dir += right_ground;
-        }
-        if self.is_left_pressed {
-            move_dir -= right_ground;
-        }
-
-        // 水平方向への移動の適用
-        if move_dir != Vec3::ZERO {
-            // 斜めの移動も1にする
-            let horizontal_pos = camera.eye + move_dir.normalize() * self.speed * dt;
-            camera.eye.x = horizontal_pos.x;
-            camera.eye.z = horizontal_pos.z;
-        }
-
-        if on_ground {
-            self.velocity_y = 0.0;
-            if self.is_up_pressed {
-                self.velocity_y = 7.5; // ジャンプ初期速度
-            }
-        } else {
-            // 空中では重力加速度を適用
-            let gravity = 18.0;
-            self.velocity_y -= gravity * dt;
-        }
-
-        // 垂直方向への移動の適用
-        camera.eye.y += self.velocity_y * dt;
-
-        // 垂直方向への移動の適用と床の突き抜け防止
-        let stand_height = ground_y + 1.8;
-        if camera.eye.y < stand_height {
-            camera.eye.y = stand_height;
-            self.velocity_y = 0.0;
         }
     }
 }

@@ -17,6 +17,8 @@ pub const CHUNK_AREA: usize = CHUNK_SIZE * MAX_HEIGHT;
 pub const MAX_HEIGHT: usize = 128;
 pub const WALK_SPEED: f32 = 6.0;
 pub const RADIUS: i32 = 4;
+pub const PLAYER_HALF_WIDTH: f32 = 0.3; // 横幅の半分（全幅 0.6）
+pub const PLAYER_HEIGHT: f32 = 1.8;     // 身長（足元から目まで）
 
 // pub type CHUNK_BLOCKS = [[[BlockType; CHUNK_SIZE]; MAX_HEIGHT]; CHUNK_SIZE];
 pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
@@ -479,54 +481,86 @@ impl State {
         }
     }
 
-    pub fn update(&mut self, dt: f32) {
-        // カメラの足元座標
-        let foot_x = self.camera.eye.x;
-        let foot_y = self.camera.eye.y - 1.8;
-        let foot_z = self.camera.eye.z;
-
-        // ワールド座標をグリッドのインデックスに変換
-        let gx = (foot_x).floor() as i32;
-        let gz = (foot_z).floor() as i32;
-
+    // delta だけ動かす。各軸を分離して衝突解決する
+    // 戻り値は「この移動で地面に接地したか」
+    fn move_player(&mut self, delta: glam::Vec3) -> bool {
         let mut on_ground = false;
-        let mut ground_y = -32.0; // デフォルトの最低地上高
 
-        if gx >= 0 && gx < CHUNK_SIZE as i32 && gz >= 0 && gz < CHUNK_SIZE as i32 {
-            let check_gy = foot_y.floor() as i32;
-            let mut found = false;
-
-            // 足元から下方向へ向かって、最初の非空気ブロックを探す
-            for gy in (0..=check_gy.clamp(0, CHUNK_SIZE as i32 - 1)).rev() {
-                let index = (gx * CHUNK_AREA as i32 + gy * CHUNK_SIZE as i32 + gz) as usize;
-                
-                if self.chunks[0].blocks[index] != BlockType::Air {
-                    let block_top = gy as f32; // ブロックの上面座標
-                    ground_y = block_top;
-
-                    if foot_y <= block_top + 0.1 {
-                        on_ground = true;
-                    }
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                if foot_y <= ground_y {
-                    on_ground = true;
-                }
-            }
+        // --- X軸（壁判定・横） ---
+        let mut try_eye = self.camera.eye;
+        try_eye.x += delta.x;
+        if self.collides_at(try_eye) {
+            // 壁にぶつかった → X の移動は捨てる（= 壁に沿って滑る）
         } else {
-            // グリッド外は Y = 0.0 平面を一時的な地面とする
-            ground_y = 0.0;
-            if foot_y <= ground_y {
-                on_ground = true;
-            }
+            self.camera.eye.x = try_eye.x;
         }
 
-        // カメラ位置の更新
-        self.camera_controller
-            .update_camera(&mut self.camera, dt, on_ground, ground_y);
+        // --- Z軸（壁判定・奥行き） ---
+        let mut try_eye = self.camera.eye;
+        try_eye.z += delta.z;
+        if self.collides_at(try_eye) {
+            // Z の移動を捨てる
+        } else {
+            self.camera.eye.z = try_eye.z;
+        }
+
+        // --- Y軸（地面・天井） ---
+        let mut try_eye = self.camera.eye;
+        try_eye.y += delta.y;
+        if self.collides_at(try_eye) {
+            // 縦にぶつかった
+            if delta.y < 0.0 {
+                on_ground = true; // 下向きで衝突 → 着地
+            }
+            // 上向きで衝突なら頭をぶつけた。いずれも縦速度を殺す
+            self.camera_controller.velocity_y = 0.0;
+        } else {
+            self.camera.eye.y = try_eye.y;
+        }
+
+        on_ground
+    }
+
+    // 目の高さを基準としたプレイヤーAABBが地形と重なっているか
+    fn collides_at(&self, eye: glam::Vec3) -> bool {
+        let min_x = eye.x - PLAYER_HALF_WIDTH;
+        let max_x = eye.x + PLAYER_HALF_WIDTH;
+        let min_y = eye.y - PLAYER_HEIGHT;
+        let max_y = eye.y;
+        let min_z = eye.z - PLAYER_HALF_WIDTH;
+        let max_z = eye.z + PLAYER_HALF_WIDTH;
+
+        // AABB が触れうるブロックセルの範囲を求める。
+        // ブロックは中心が整数で占有が [中心-0.5, 中心+0.5] なので、
+        // 座標 p が属するセル番号は (p + 0.5).floor()。
+        let x0 = (min_x + 0.5).floor() as i32;
+        let x1 = (max_x + 0.5).floor() as i32;
+        let y0 = (min_y + 0.5).floor() as i32;
+        let y1 = (max_y + 0.5).floor() as i32;
+        let z0 = (min_z + 0.5).floor() as i32;
+        let z1 = (max_z + 0.5).floor() as i32;
+
+        for wx in x0..=x1 {
+            for wy in y0..=y1 {
+                for wz in z0..=z1 {
+                    if self.is_solid_world(wx, wy, wz) {
+                        return true; // 1つでも重なれば衝突
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    pub fn update(&mut self, dt: f32) {
+        // このフレームの希望移動量を計算（controller は前フレームの on_ground を参照）
+        let delta = self.camera_controller.compute_move(&mut self.camera, dt);
+
+        // 軸分離で実際に動かし、接地したかを受け取る
+        let on_ground = self.move_player(delta);
+
+        // 接地状態を controller に書き戻す（次フレームのジャンプ/重力判定に使う）
+        self.camera_controller.on_ground = on_ground;
 
         // カメラUniformの更新と書き込み
         self.camera_uniform.update_view_proj(&self.camera);
@@ -535,6 +569,34 @@ impl State {
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
+    }
+    
+    // ワールド座標のブロックを返す
+    fn block_at_world(&self, wx: i32, wy: i32, wz: i32) -> BlockType {
+        if wy < 0 || wy >= MAX_HEIGHT as i32 {
+            return BlockType::Air;
+        }
+
+        // ワールド座標をチャンク座標+チャンク内ローカル座標に分解
+        let cx = wx.div_euclid(CHUNK_SIZE as i32);
+        let cz = wz.div_euclid(CHUNK_SIZE as i32);
+        let lx = wx.rem_euclid(CHUNK_SIZE as i32);
+        let lz = wz.rem_euclid(CHUNK_SIZE as i32);
+
+        // 該当チャンクを探す
+        let Some(chunk) = self.chunks.iter().find(|c| c.coord == (cx, cz)) else {
+            return BlockType::Air;
+        };
+
+        let index = (lx as usize) * CHUNK_AREA
+                  + (wy as usize) * CHUNK_SIZE
+                  + (lz as usize);
+        chunk.blocks[index]
+    }
+
+    // ワールド座標かソリッドか
+    fn is_solid_world(&self, wx: i32, wy: i32, wz: i32) -> bool {
+        self.block_at_world(wx, wy, wz) != BlockType::Air
     }
 
     /// ウィンドウサイズ変更時に呼び出され、描画領域と深度バッファを再構成

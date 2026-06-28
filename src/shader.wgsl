@@ -53,6 +53,15 @@ fn vs_main(
 fn fs_main(in: VsOut) -> @location(0) vec4f {
     var color = in.color;
 
+    let thickness = 0.02; 
+    let lineColor = vec3(0.0, 0.0, 0.0); // 線の色（黒）
+
+    // XまたはYが端っこに近いか判定
+    if (in.tex_coords.x < thickness || in.tex_coords.x > 1.0 - thickness ||
+        in.tex_coords.y < thickness || in.tex_coords.y > 1.0 - thickness) {
+        color = vec4(lineColor, 1.0);
+    }
+
     return color;
 }
 
