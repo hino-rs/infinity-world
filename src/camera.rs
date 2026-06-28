@@ -55,6 +55,15 @@ impl Camera {
         }
     }
 
+    pub fn xyz(&self) -> (f32, f32, f32) {
+        let eye = self.eye;
+        (
+            eye.x,
+            eye.y,
+            eye.z,
+        )
+    }
+
     // ヨーとピッチからカメラんの前方ベクトルを計算する
     pub fn calc_forward(&self) -> Vec3 {
         let (sin_pitch, cos_pitch) = self.pitch.sin_cos();

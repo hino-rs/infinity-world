@@ -2,10 +2,15 @@ use crate::{
     camera::{Camera, CameraController, CameraUniform}, game::{self, BlockType}, terrain::{self, create_terrain},
 };
 
+use wgpu_text::{
+    glyph_brush::{ab_glyph::FontArc, Section as TextSection, Text},
+    BrushBuilder, TextBrush,
+};
 use std::sync::Arc;
-use web_time::Instant;
 use wgpu::util::DeviceExt;
 use winit::window::Window;
+use web_time::Instant;
+use std::collections::VecDeque;
 
 pub const CHUNK_SIZE: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_SIZE * MAX_HEIGHT;
@@ -14,6 +19,91 @@ pub const WALK_SPEED: f32 = 6.0;
 
 // pub type CHUNK_BLOCKS = [[[BlockType; CHUNK_SIZE]; MAX_HEIGHT]; CHUNK_SIZE];
 pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
+
+// フォント
+static FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-VariableFont_wght.ttf");
+
+pub struct FpsCounter {
+    pub last_frame: Instant,
+    pub frame_times: VecDeque<f64>, // 直近Nフレームの時間
+    pub max_samples: usize,
+    pub cached_fps: f64,
+    pub min_frame_time: f64,
+    pub max_frame_time: f64,
+}
+
+impl FpsCounter {
+    fn new(samples: usize) -> Self {
+        Self {
+            last_frame: Instant::now(),
+            frame_times: VecDeque::with_capacity(samples),
+            max_samples: samples,
+            cached_fps: 0.0,
+            min_frame_time: f64::MAX,
+            max_frame_time: 0.0,
+        }
+    }
+
+    pub fn tick(&mut self) -> f64 {
+        let now = Instant::now();
+        let delta = now.duration_since(self.last_frame).as_secs_f64();
+        self.last_frame = now;
+
+        if self.frame_times.len() >= self.max_samples {
+            self.frame_times.pop_front();
+        }
+        self.frame_times.push_back(delta);
+
+        // FPS計算
+        let avg_delta = self.frame_times.iter().sum::<f64>()
+            / self.frame_times.len() as f64;
+        self.cached_fps = if avg_delta > 0.0 { 1.0 / avg_delta } else { 0.0 };
+
+        self.min_frame_time = self.min_frame_time.min(delta);
+        self.max_frame_time = self.max_frame_time.max(delta);
+
+        delta
+    }
+
+    fn fps(&self) -> f64 {
+        self.cached_fps
+    }
+
+    // フレーム時間
+    fn frame_time_ms(&self) -> f64 {
+        if let Some(&last) = self.frame_times.back() {
+            last * 1000.0
+        } else {
+            0.0
+        }
+    }
+
+    // 最小FPS
+    fn min_fps(&self) -> f64 {
+        if self.max_frame_time > 0.0 { 1.0 / self.max_frame_time } else { 0.0 }
+    }
+
+    // 最大FPS
+    pub fn max_fps(&self) -> f64 {
+        if self.min_frame_time < f64::MAX { 1.0 / self.min_frame_time } else { 0.0 }
+    }
+
+    // サンプルのリセット
+    pub fn reset_stats(&mut self) {
+        self.min_frame_time = f64::MAX;
+        self.max_frame_time = 0.0;
+    }
+
+    pub fn summary(&self) -> String {
+        format!(
+            "FPS: {:.1} | Frame: {:.2}ms | Min: {:.1} Max: {:.1}",
+            self.fps(),
+            self.frame_time_ms(),
+            self.min_fps(),
+            self.max_fps(),
+        )
+    }
+}
 
 /// レンダリング処理全体の状態を管理する構造体。
 pub struct State {
@@ -50,7 +140,10 @@ pub struct State {
     camera_bind_group: wgpu::BindGroup,
     pub camera_controller: CameraController,
 
+    pub fps: FpsCounter,
+
     time: Instant,
+    brush: TextBrush<FontArc>,
 }
 
 impl State {
@@ -129,7 +222,7 @@ impl State {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo, // VSync同期
+            present_mode: wgpu::PresentMode::AutoNoVsync, // VSync同期
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -137,7 +230,7 @@ impl State {
         surface.configure(&device, &config);
 
         let camera = Camera::new(
-            glam::Vec3::new(0.0, 1.8, 5.0),
+            glam::Vec3::new(0.0, 10.0, 0.0),
             0.0f32.to_radians(),
             -5.0f32.to_radians(),
             config.width as f32 / config.height as f32,
@@ -351,6 +444,10 @@ impl State {
             cache: None,
         });
 
+        let font = FontArc::try_from_slice(FONT_BYTES).expect("フォント読み込み失敗");
+        let brush = BrushBuilder::using_font(font)
+            .build(&device, config.width, config.height, config.format);
+
         Self {
             surface,
             device,
@@ -372,6 +469,8 @@ impl State {
             camera_buffer,
             camera_bind_group,
             camera_controller,
+            fps: FpsCounter::new(120),
+            brush,
         }
     }
 
@@ -388,7 +487,6 @@ impl State {
         let mut on_ground = false;
         let mut ground_y = -32.0; // デフォルトの最低地上高
 
-        println!("|{foot_x:.0}|{foot_y:.0}|{foot_z:.0}|GX:{gx}|GZ:{gz}|");
         if gx >= 0 && gx < CHUNK_SIZE as i32 && gz >= 0 && gz < CHUNK_SIZE as i32 {
             let check_gy = foot_y.floor() as i32;
             let mut found = false;
@@ -396,7 +494,6 @@ impl State {
             // 足元から下方向へ向かって、最初の非空気ブロックを探す
             for gy in (0..=check_gy.clamp(0, CHUNK_SIZE as i32 - 1)).rev() {
                 let index = (gx * CHUNK_AREA as i32 + gy * CHUNK_SIZE as i32 + gz) as usize;
-                println!("{:?}", self.blocks[index]);
                 
                 if self.blocks[index] != BlockType::Air {
                     let block_top = gy as f32; // ブロックの上面座標
@@ -442,6 +539,8 @@ impl State {
             self.config.height = new_size.height;
             // サーフェス（描画ウィンドウ）のサイズ再設定
             self.surface.configure(&self.device, &self.config);
+            // テキストブラシにプロジェクションサイズ変更を通知
+            self.brush.resize_view(new_size.width as f32, new_size.height as f32, &self.queue);
             // ウィンドウサイズに応じた大きさで深度テクスチャを再生成
             let (depth_texture, depth_view) =
                 Self::create_depth_texture(&self.device, &self.config);
@@ -452,6 +551,8 @@ impl State {
 
     /// 毎フレーム実行されるレンダリング処理。
     pub fn render(&mut self) {
+        let _delta = self.fps.tick();
+
         // サーフェスから現在の描画フレームとなるテクスチャを取得
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
@@ -545,6 +646,50 @@ impl State {
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             // 頂点バッファを使わずに、3つの頂点（インデックス0, 1, 2）で描画を実行
             render_pass.draw(0..3, 0..1);
+        }
+
+        // テキスト情報を構築してキューに追加
+        let fps_text = format!("FPS: {:.0}", &self.fps.fps());
+        let coord = self.camera.xyz();
+        let coord_text = format!("{:.0}, {:.0}, {:.0}", coord.0, coord.1, coord.2);
+
+        let fps_section = TextSection::default()
+            .add_text(
+                Text::new(&fps_text)
+                    .with_scale(20.0)
+                    .with_color([0.0, 0.0, 0.0, 1.0])
+            )
+            .with_screen_position((10.0, 10.0));
+
+        let coord_section = TextSection::default()
+            .add_text(
+                Text::new(&coord_text)
+                    .with_scale(20.0)
+                    .with_color([0.0, 0.0, 0.0, 1.0])
+            )
+            .with_screen_position((10.0, 30.0));
+
+        self.brush.queue(&self.device, &self.queue, [&fps_section, &coord_section]).unwrap();
+
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Text Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,         // スワップチェーンの TextureView
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load, // 前の3D描画結果の上に重ねるためLoadを使用
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+            self.brush.draw(&mut rpass);
         }
 
         // コマンドを実行キューに送信
