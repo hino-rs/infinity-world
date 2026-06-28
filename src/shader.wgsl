@@ -26,22 +26,20 @@ struct VsOutSky {
 fn vs_main(
     @location(0) pos: vec3f,
     @location(1) tex_coords: vec2f,
-    @location(2) instance_pos: vec3f, // インスタンスバッファから渡される各立方体の位置
-    @location(3) instance_type: u32,
+    @location(2) block_type: u32,
 ) -> VsOut {
     var out: VsOut;
-    // 頂点の基本位置にインスタンスの位置を足してワールド空間での位置にする
-    let world_pos = pos + instance_pos;
+    let world_pos = pos;
     out.clip_pos = camera.view_proj * vec4f(world_pos, 1.0);
     out.tex_coords = tex_coords;
 
-    if instance_type == 0 {
+    if block_type == 0u {
         out.color = vec4f(0.0);
-    } else if instance_type == 1 {
+    } else if block_type == 1u {
         out.color = vec4f(0.4, 0.4, 0.4, 1.0);
-    } else if instance_type == 2 {
+    } else if block_type == 2u {
         out.color = vec4f(0.7, 0.45, 0.25, 1.0);
-    } else if instance_type == 3 {
+    } else if block_type == 3u {
         out.color = vec4f(0.48, 0.55, 0.26, 1.0);
     }
     return out;

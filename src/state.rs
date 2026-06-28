@@ -1,7 +1,5 @@
 use crate::{
-    camera::{Camera, CameraController, CameraUniform},
-    game::{self, BlockType, InstanceRaw},
-    terrain::create_terrain,
+    camera::{Camera, CameraController, CameraUniform}, game::{self, BlockType}, terrain::{self, create_terrain},
 };
 
 use std::sync::Arc;
@@ -10,7 +8,7 @@ use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 pub const CHUNK_SIZE: usize = 16;
-pub const CHUNK_AREA: usize = CHUNK_SIZE * CHUNK_SIZE;
+pub const CHUNK_AREA: usize = CHUNK_SIZE * MAX_HEIGHT;
 pub const MAX_HEIGHT: usize = 256;
 pub const WALK_SPEED: f32 = 6.0;
 
@@ -47,10 +45,6 @@ pub struct State {
     depth_view: wgpu::TextureView,
     /// アニメーションによる回転角度
     angle: f32,
-
-    instance_buffer: wgpu::Buffer,
-    num_instances: u32,
-    instances: Vec<InstanceRaw>,
 
     blocks: ChunkBlocks,
 
@@ -228,21 +222,6 @@ impl State {
             label: Some("Uniform Bind Group"),
         });
 
-        // 頂点バッファの作成（立方体の8つの頂点情報）
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(game::create_virtices()),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        // インデックスバッファの作成（三角形面を形作るインデックス順序）
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(game::INDICES),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-        let num_indices = game::INDICES.len() as u32;
-
         // WGSLシェーダーファイルの読み込みとモジュール化
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
@@ -260,14 +239,23 @@ impl State {
                 immediate_size: 0,
             });
 
-        let (instances, blocks) = create_terrain();
+        let (_, blocks) = create_terrain();
+        let (chunk_vertices, chunk_indices) = terrain::build_chunk_mesh(&blocks);
 
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instances),
+        // 頂点バッファの作成
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(&chunk_vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
-        let num_instances = instances.len() as u32;
+
+        // インデックスバッファの作成
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(&chunk_indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        let num_indices = chunk_indices.len() as u32;
 
         // レンダリングパイプライン全体の作成
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -279,9 +267,7 @@ impl State {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[
-                    // game::Vertex で定義した頂点レイアウトを使用
-                    game::Vertex::desc(), // スロット 0: 形状用 (VertexStepMode::Vertex)
-                    InstanceRaw::desc(),  // スロット 1: インスタンス用 (VertexStepMode::Instance)
+                    game::TerrainVertex::desc(), // スロット 0: チャンクメッシュ用 (VertexStepMode::Vertex)
                 ],
                 compilation_options: Default::default(),
             },
@@ -385,15 +371,12 @@ impl State {
             depth_view,
             angle: 0.0,
             time: Instant::now(),
-            instance_buffer,
-            num_instances,
             blocks,
             camera,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
             camera_controller,
-            instances,
         }
     }
 
@@ -576,11 +559,10 @@ impl State {
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]); // スロット0にMVP行列のUniformを設定
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]); // スロット1 (カメラ)
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // 頂点バッファの設定
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // インデックスバッファの設定
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32); // インデックスバッファの設定 (Uint32に変更)
 
-            // インデックス順に従って立方体を描画
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.num_instances);
+            // チャンクメッシュを描画 (インスタンス数は1)
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
 
             // パイプラインを空描画用に切り替える
             render_pass.set_pipeline(&self.sky_pipeline);
