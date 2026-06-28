@@ -1,5 +1,5 @@
 use crate::{
-    camera::{Camera, CameraController, CameraUniform}, game::{self, BlockType}, terrain::{self, create_terrain},
+    camera::{Camera, CameraController, CameraUniform}, game::{self, BlockType}, terrain::{self, Chunk, create_terrain},
 };
 
 use wgpu_text::{
@@ -14,8 +14,9 @@ use std::collections::VecDeque;
 
 pub const CHUNK_SIZE: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_SIZE * MAX_HEIGHT;
-pub const MAX_HEIGHT: usize = 256;
+pub const MAX_HEIGHT: usize = 128;
 pub const WALK_SPEED: f32 = 6.0;
+pub const RADIUS: i32 = 4;
 
 // pub type CHUNK_BLOCKS = [[[BlockType; CHUNK_SIZE]; MAX_HEIGHT]; CHUNK_SIZE];
 pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
@@ -119,12 +120,6 @@ pub struct State {
     render_pipeline: wgpu::RenderPipeline,
 
     sky_pipeline: wgpu::RenderPipeline,
-    /// 頂点データを格納するGPUバッファ
-    vertex_buffer: wgpu::Buffer,
-    /// インデックスデータを格納するGPUバッファ
-    index_buffer: wgpu::Buffer,
-    /// 描画するインデックス数
-    num_indices: u32,
     /// MVP行列を保持するUniformバッファ
     uniform_buffer: wgpu::Buffer,
     /// Uniformバッファにアクセスするためのバインドグループ
@@ -132,7 +127,8 @@ pub struct State {
     /// 3Dの前後関係を正しく描画するための深度バッファテクスチャ
     depth_texture: wgpu::Texture,
     depth_view: wgpu::TextureView,
-    blocks: ChunkBlocks,
+
+    chunks: Vec<Chunk>,
 
     pub camera: Camera,
     camera_uniform: CameraUniform,
@@ -230,13 +226,13 @@ impl State {
         surface.configure(&device, &config);
 
         let camera = Camera::new(
-            glam::Vec3::new(0.0, 10.0, 0.0),
+            glam::Vec3::new(5.0, 40.0, 5.0),
             0.0f32.to_radians(),
-            -5.0f32.to_radians(),
+            -20.0f32.to_radians(),
             config.width as f32 / config.height as f32,
-            60.0f32.to_radians(),
+            80.0f32.to_radians(),
             0.1,
-            100.0,
+            10000.0,
         );
 
         let mut camera_uniform = CameraUniform::new();
@@ -328,23 +324,35 @@ impl State {
                 immediate_size: 0,
             });
 
-        let blocks = create_terrain();
-        let (chunk_vertices, chunk_indices) = terrain::build_chunk_mesh(&blocks);
+        let mut chunks = Vec::new();
+        let mut num_chunks = 0;
+        for cx in -RADIUS..=RADIUS {
+            for cz in -RADIUS..=RADIUS {
+                let blocks = create_terrain(cx, cz);
+                let (verts, inds) = terrain::build_chunk_mesh(&blocks, cx, cz);
+                
+                let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Chunk Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&verts),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+                let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Chunk Index Buffer"),
+                    contents: bytemuck::cast_slice(&inds),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
 
-        // 頂点バッファの作成
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&chunk_vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        // インデックスバッファの作成
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&chunk_indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-        let num_indices = chunk_indices.len() as u32;
+                chunks.push(Chunk {
+                    coord: (cx, cz),
+                    blocks,
+                    vertex_buffer,
+                    index_buffer,
+                    num_indices: inds.len() as u32,
+                });
+                num_chunks += 1;
+                println!("チャンク{num_chunks}: 生成完了");
+            }
+        }
 
         // レンダリングパイプライン全体の作成
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -455,15 +463,12 @@ impl State {
             config,
             render_pipeline,
             sky_pipeline,
-            vertex_buffer,
-            index_buffer,
-            num_indices,
             uniform_buffer,
             uniform_bind_group,
             depth_texture,
             depth_view,
             time: Instant::now(),
-            blocks,
+            chunks,
             camera,
             camera_uniform,
             camera_buffer,
@@ -495,7 +500,7 @@ impl State {
             for gy in (0..=check_gy.clamp(0, CHUNK_SIZE as i32 - 1)).rev() {
                 let index = (gx * CHUNK_AREA as i32 + gy * CHUNK_SIZE as i32 + gz) as usize;
                 
-                if self.blocks[index] != BlockType::Air {
+                if self.chunks[0].blocks[index] != BlockType::Air {
                     let block_top = gy as f32; // ブロックの上面座標
                     ground_y = block_top;
 
@@ -634,11 +639,13 @@ impl State {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]); // スロット0にMVP行列のUniformを設定
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]); // スロット1 (カメラ)
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // 頂点バッファの設定
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32); // インデックスバッファの設定 (Uint32に変更)
-
-            // チャンクメッシュを描画 (インスタンス数は1)
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            
+            // チャンク
+            for chunk in &self.chunks {
+                render_pass.set_vertex_buffer(0, chunk.vertex_buffer.slice(..));
+                render_pass.set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..chunk.num_indices, 0, 0..1);
+            }
 
             // パイプラインを空描画用に切り替える
             render_pass.set_pipeline(&self.sky_pipeline);
