@@ -11,12 +11,13 @@ use wgpu::util::DeviceExt;
 use winit::window::Window;
 use web_time::Instant;
 use std::collections::VecDeque;
+use rayon::prelude::*;
 
 pub const CHUNK_SIZE: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_SIZE * MAX_HEIGHT;
 pub const MAX_HEIGHT: usize = 256;
 pub const WALK_SPEED: f32 = 6.0;
-pub const RADIUS: i32 = 32;
+pub const RADIUS: i32 = 16;
 pub const PLAYER_HALF_WIDTH: f32 = 0.3; // 横幅の半分（全幅 0.6）
 pub const PLAYER_HEIGHT: f32 = 1.8;     // 身長（足元から目まで）
 
@@ -25,6 +26,13 @@ pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
 
 // フォント
 static FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-VariableFont_wght.ttf");
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct GeneralUniforms {
+    time: f32,
+    _p1: [f32; 3],
+}
 
 pub struct FpsCounter {
     pub last_frame: Instant,
@@ -122,7 +130,7 @@ pub struct State {
     render_pipeline: wgpu::RenderPipeline,
 
     sky_pipeline: wgpu::RenderPipeline,
-    /// MVP行列を保持するUniformバッファ
+
     uniform_buffer: wgpu::Buffer,
     /// Uniformバッファにアクセスするためのバインドグループ
     uniform_bind_group: wgpu::BindGroup,
@@ -220,7 +228,7 @@ impl State {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::AutoVsync,
+            present_mode: wgpu::PresentMode::AutoNoVsync,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -250,7 +258,7 @@ impl State {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -275,12 +283,11 @@ impl State {
         // 深度バッファの初期作成
         let (depth_texture, depth_view) = Self::create_depth_texture(&device, &config);
 
-        // Uniform（MVP行列）のメモリ配置/スロットを記述するバインドグループレイアウトの作成
         let uniform_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,                             // シェーダー内の @binding(0) に対応
-                    visibility: wgpu::ShaderStages::VERTEX, // 頂点シェーダーから参照
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT, // 頂点シェーダーから参照
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -291,11 +298,13 @@ impl State {
                 label: Some("Uniform Bind Group Layout"),
             });
 
-        // 最初のMVP行列を初期化（単位行列）してUniformバッファを作成
-        let mvp = glam::Mat4::IDENTITY;
+        let uniform_data = GeneralUniforms {
+            time: 0.0,
+            _p1: [0.0, 0.0, 0.0],
+        };
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[mvp.to_cols_array_2d()]),
+            contents: bytemuck::bytes_of(&uniform_data),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -326,32 +335,44 @@ impl State {
                 immediate_size: 0,
             });
 
-        let mut chunks = Vec::new();
-        for cx in -RADIUS..=RADIUS {
-            for cz in -RADIUS..=RADIUS {
+        let now = Instant::now();
+        // 座標リストを作る
+        let coords: Vec<(i32, i32)> = (-RADIUS..=RADIUS)
+            .flat_map(|cx| (-RADIUS..=RADIUS).map(move |cz| (cx, cz)))
+            .collect();
+
+        // CPU処理だけ並列化
+        let cpu_results: Vec<_> = coords
+            .par_iter()
+            .map(|&(cx, cz)| {
                 let blocks = create_terrain(cx, cz);
                 let (verts, inds) = terrain::build_chunk_mesh(&blocks, cx, cz);
-                
-                let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Chunk Vertex Buffer"),
-                    contents: bytemuck::cast_slice(&verts),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-                let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Chunk Index Buffer"),
-                    contents: bytemuck::cast_slice(&inds),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
+                (cx, cz, blocks, verts, inds)
+            })
+            .collect();
 
-                chunks.push(Chunk {
-                    coord: (cx, cz),
-                    blocks,
-                    vertex_buffer,
-                    index_buffer,
-                    num_indices: inds.len() as u32,
-                });
-            }
+        // GPUバッファ生成
+        let mut chunks = Vec::with_capacity(cpu_results.len());
+        for (cx, cz, blocks, verts, inds) in cpu_results {
+            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Vertex Buffer"),
+                contents: bytemuck::cast_slice(&verts),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Index Buffer"),
+                contents: bytemuck::cast_slice(&inds),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+            chunks.push(Chunk {
+                coord: (cx, cz),
+                blocks,
+                vertex_buffer,
+                index_buffer,
+                num_indices: inds.len() as u32,
+            });
         }
+        println!("地形生成とメッシュ作成にかかった時間: {}ms", now.elapsed().as_millis());
 
         // レンダリングパイプライン全体の作成
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -550,6 +571,7 @@ impl State {
     }
 
     pub fn update(&mut self, dt: f32) {
+        let time = Instant::now().duration_since(self.time).as_secs_f32();
         // このフレームの希望移動量を計算（controller は前フレームの on_ground を参照）
         let delta = self.camera_controller.compute_move(&mut self.camera, dt);
 
@@ -558,6 +580,15 @@ impl State {
 
         // 接地状態を controller に書き戻す（次フレームのジャンプ/重力判定に使う）
         self.camera_controller.on_ground = on_ground;
+
+        self.queue.write_buffer(
+            &self.uniform_buffer, 
+            0, 
+            bytemuck::bytes_of(&GeneralUniforms {
+                time: time,
+                _p1: [0.0, 0.0, 0.0],
+            }),
+        );
 
         // カメラUniformの更新と書き込み
         self.camera_uniform.update_view_proj(&self.camera);
@@ -640,17 +671,6 @@ impl State {
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-
-        // アニメーション角度の更新
-        // self.angle += 0.01;
-
-        let model_matrix = glam::Mat4::IDENTITY;
-        let mvp = model_matrix;
-        self.queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[mvp.to_cols_array_2d()]),
-        );
 
         // GPUに指示するコマンドエンコーダーの作成
         let mut encoder = self

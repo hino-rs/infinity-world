@@ -24,7 +24,7 @@ fn surface_height(wx: f64, wz: f64) -> i32 {
     // 山岳
     let n = get_fbm(wx / 220.0, 0.0, wz / 220.0, SEED + 1, 5);
     let ridge = (1.0 - n.abs()).powi(3);
-    let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, SEED + 2, 2) * 0.5 + 0.5 - 0.45).max(0.0);
+    let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, SEED + 2, 2) * 0.5 + 0.85 - 0.0).max(0.0);
     let mountains = ridge * mask * MAX_MOUNTAIN_HEIGHT;
 
     (SEA_LEVEL + hills + mountains).round() as i32
@@ -42,6 +42,78 @@ fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
     let index = (x as usize) * CHUNK_AREA + (y as usize) * CHUNK_SIZE + (z as usize);
     blocks[index] != BlockType::Air
 }
+
+fn value_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
+    noise::Value::new(seed).get([x, y, z])
+}
+
+fn perlin_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
+    noise::Perlin::new(seed).get([x, y, z])
+}
+
+fn simplex_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
+    noise::OpenSimplex::new(seed).get([x, y, z])
+}
+
+fn ridged_multi_perlin_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
+    noise::RidgedMulti::<noise::Perlin>::new(seed).get([x, y, z])
+}
+
+
+fn get_fbm(x: f64, y: f64, z: f64, seed: u32, octaves: u32) -> f64 {
+    let mut sum = 0.0;
+    let mut amplitude = 0.5;
+    let mut frequency = 1.0;
+    let mut max_val = 0.0;
+
+    // 空隙性
+    let lacunarity = 2.0;
+    // 持続度
+    let persistence = 0.5;
+
+    for i in 0..octaves {
+        let n = simplex_noise(x * frequency, y * frequency, z * frequency, seed + i * 131);
+        
+        sum += n * amplitude;
+        max_val += amplitude;
+        amplitude *= persistence;
+        frequency *= lacunarity;
+    }
+
+    sum / max_val
+}
+
+pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
+    a + (b - a) * t
+}
+
+pub fn create_terrain(chunk_x: i32, chunk_z: i32) -> ChunkBlocks {
+    let mut blocks = [BlockType::Air; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
+
+    for x in 0..CHUNK_SIZE {
+        for z in 0..CHUNK_SIZE {
+            let wx = (chunk_x * CHUNK_SIZE as i32 + x as i32) as f64;
+            let wz = (chunk_z * CHUNK_SIZE as i32 + z as i32) as f64;
+
+            let h = surface_height(wx, wz).clamp(1, MAX_HEIGHT as i32 - 1);
+
+            // 底から地表高さまで詰めるだけ（上はデフォルトの Air のまま）
+            for y in 0..=h as usize {
+                let yi = y as i32;
+                let index = x * CHUNK_AREA + y * CHUNK_SIZE + z;
+                blocks[index] = if yi == h {
+                    if h > 60 { BlockType::Stone } else { BlockType::Grass } // 高所は岩肌
+                } else if yi >= h - DIRT_DEPTH {
+                    BlockType::Dirt
+                } else {
+                    BlockType::Stone
+                };
+            }
+        }
+    }
+    blocks
+}
+
 
 pub fn build_chunk_mesh(
     blocks: &ChunkBlocks,
@@ -318,115 +390,4 @@ pub fn build_chunk_mesh(
     }
 
     (vertices, indices)
-}
-
-fn value_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
-    noise::Value::new(seed).get([x, y, z])
-}
-
-fn perlin_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
-    noise::Perlin::new(seed).get([x, y, z])
-}
-
-fn simplex_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
-    noise::OpenSimplex::new(seed).get([x, y, z])
-}
-
-fn ridged_multi_perlin_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
-    noise::RidgedMulti::<noise::Perlin>::new(seed).get([x, y, z])
-}
-
-
-fn get_fbm(x: f64, y: f64, z: f64, seed: u32, octaves: u32) -> f64 {
-    let mut sum = 0.0;
-    let mut amplitude = 0.5;
-    let mut frequency = 1.0;
-    let mut max_val = 0.0;
-
-    // 空隙性
-    let lacunarity = 2.0;
-    // 持続度
-    let persistence = 0.5;
-
-    for i in 0..octaves {
-        let n = simplex_noise(x * frequency, y * frequency, z * frequency, seed + i * 131);
-        
-        sum += n * amplitude;
-        max_val += amplitude;
-        amplitude *= persistence;
-        frequency *= lacunarity;
-    }
-
-    sum / max_val
-}
-
-pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
-    a + (b - a) * t
-}
-
-// pub fn create_terrain(chunk_x: i32, chunk_z: i32) -> ChunkBlocks {
-//     let mut blocks = [BlockType::Air; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
-//     let scale = 8.0;
-
-//     for x in 0..CHUNK_SIZE {
-//         for y in 0..MAX_HEIGHT {
-//             for z in 0..CHUNK_SIZE {
-//                 let index = x * CHUNK_AREA + y * CHUNK_SIZE + z;
-//                 if y == 0 {
-//                     blocks[index] = BlockType::Stone;
-//                     continue;
-//                 }
-
-//                 // ローカル座標からワールド座標
-//                 let wx = (chunk_x * CHUNK_SIZE as i32 + x as i32) as f64;
-//                 let wz = (chunk_z * CHUNK_SIZE as i32 + z as i32) as f64;
-
-//                 // 高いほどバイアスを大きく
-//                 // let height_bias = y as f64 / MAX_HEIGHT as f64;
-//                 // 座標をscaleで割りバイアスで引く
-//                 // let r = get_fbm(wx / scale, y as f64 / scale, wz / scale, SEED, 4) + height_bias;
-//                 let r = get_fbm(wx / scale, y as f64 / scale, wz / scale, SEED, 4);
-
-//                 let block = if r < -0.2 {
-//                     BlockType::Stone
-//                 } else if r < 0.0 {
-//                     BlockType::Dirt
-//                 } else if r < 0.1 {
-//                     BlockType::Grass
-//                 } else {
-//                     BlockType::Air
-//                 };
-//                 blocks[index] = block;
-//             }
-//         }
-//     }
-
-//     blocks
-// }
-
-pub fn create_terrain(chunk_x: i32, chunk_z: i32) -> ChunkBlocks {
-    let mut blocks = [BlockType::Air; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
-
-    for x in 0..CHUNK_SIZE {
-        for z in 0..CHUNK_SIZE {
-            let wx = (chunk_x * CHUNK_SIZE as i32 + x as i32) as f64;
-            let wz = (chunk_z * CHUNK_SIZE as i32 + z as i32) as f64;
-
-            let h = surface_height(wx, wz).clamp(1, MAX_HEIGHT as i32 - 1);
-
-            // 底から地表高さまで詰めるだけ（上はデフォルトの Air のまま）
-            for y in 0..=h as usize {
-                let yi = y as i32;
-                let index = x * CHUNK_AREA + y * CHUNK_SIZE + z;
-                blocks[index] = if yi == h {
-                    if h > 60 { BlockType::Stone } else { BlockType::Grass } // 高所は岩肌
-                } else if yi >= h - DIRT_DEPTH {
-                    BlockType::Dirt
-                } else {
-                    BlockType::Stone
-                };
-            }
-        }
-    }
-    blocks
 }

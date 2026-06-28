@@ -5,11 +5,11 @@ struct CameraUniform {
 };
 @group(1) @binding(0) var<uniform> camera: CameraUniform;
 
-struct Uniforms {
-    mvp: mat4x4f,
+struct GeneralUniforms {
+    time: f32,
 };
 
-@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(0) var<uniform> g_u: GeneralUniforms;
 
 struct VsOut {
     @builtin(position) clip_pos: vec4f,
@@ -87,7 +87,8 @@ fn vs_sky(@builtin(vertex_index) vertex_index: u32) -> VsOutSky {
 @fragment
 fn fs_sky(in: VsOutSky) -> @location(0) vec4f {
     let view_dir = normalize(in.view_dir);
-    let sun_dir = normalize(vec3f(1.0));
+    let x = g_u.time*0.1;
+    let sun_dir = normalize(vec3f(cos(x), sin(x), 0.0));
     let sky_color = render_sky(view_dir, sun_dir);
 
     return vec4f(sky_color, 1.0);
@@ -101,9 +102,14 @@ fn render_sky(view_dir: vec3f, sun_dir: vec3f) -> vec3f {
     // 太陽の描画
     let sun_dot = max(0.0, dot(view_dir, sun_dir));
 
+    // 太陽のサイズはyに基づかせる
+    let sun_h = max(0.0, sun_dir.y);
+    let size_exp = mix(800.0, 200.0, sun_h);
+    let glow_exp = mix(30.0, 10.0, sun_h);
+
     // 太陽の輪郭をシャープにする
-    let sun_size = pow(sun_dot, 500.0);
-    let sun_glow = pow(sun_dot, 20.0); // 太陽の周りのぼんやりした光
+    let sun_size = pow(sun_dot, size_exp);
+    let sun_glow = pow(sun_dot, glow_exp); // 太陽の周りのぼんやりした光
 
     let sun_color = vec3f(1.0, 0.9, 0.7) * sun_size + vec3f(1.0, 0.6, 0.3) * sun_glow;
 

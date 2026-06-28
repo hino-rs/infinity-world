@@ -854,6 +854,7 @@ dependencies = [
  "noise",
  "pollster",
  "rand 0.10.1",
+ "rayon",
  "web-time",
  "wgpu",
  "wgpu_text",
