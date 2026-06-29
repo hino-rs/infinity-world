@@ -13,11 +13,11 @@ use web_time::Instant;
 use std::collections::VecDeque;
 use rayon::prelude::*;
 
-pub const CHUNK_SIZE: usize = 16;
+pub const CHUNK_SIZE: usize = 8;
 pub const CHUNK_AREA: usize = CHUNK_SIZE * MAX_HEIGHT;
 pub const MAX_HEIGHT: usize = 256;
 pub const WALK_SPEED: f32 = 6.0;
-pub const RADIUS: i32 = 16;
+pub const RADIUS: i32 = 1;
 pub const PLAYER_HALF_WIDTH: f32 = 0.3; // 横幅の半分（全幅 0.6）
 pub const PLAYER_HEIGHT: f32 = 1.8;     // 身長（足元から目まで）
 

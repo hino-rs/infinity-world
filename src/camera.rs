@@ -34,6 +34,7 @@ pub struct CameraController {
     pub is_dash_pressed: bool,
     pub on_ground: bool,
     pub teleport: bool,
+    pub floating: bool,
 }
 
 impl Camera {
@@ -121,6 +122,13 @@ impl CameraController {
 
     // 入力と重力から、このフレームの移動量を計算して返す。
     pub fn compute_move(&mut self, camera: &mut Camera, dt: f32) -> Vec3 {
+        if self.teleport {
+            camera.eye.x = 0.0;
+            camera.eye.z = 0.0;    
+            camera.eye.y = 300.0;
+            return Vec3::ZERO;
+        }
+        
         // 地面に水平な前方・右方向（XZ平面）
         let (sin_yaw, cos_yaw) = camera.yaw.sin_cos();
         let forward_ground = Vec3::new(sin_yaw, 0.0, -cos_yaw).normalize();
@@ -137,12 +145,6 @@ impl CameraController {
         if self.is_backward_pressed { move_dir -= forward_ground; }
         if self.is_right_pressed    { move_dir += right_ground; }
         if self.is_left_pressed     { move_dir -= right_ground; }
-        
-        if self.teleport {
-            camera.eye.x = 0.0;
-            camera.eye.z = 0.0;
-            camera.eye.y = 300.0;
-        }
 
         // 水平移動量（斜めも同じ速さになるよう正規化）
         let horizontal = if move_dir != Vec3::ZERO {
@@ -151,22 +153,33 @@ impl CameraController {
             Vec3::ZERO
         };
 
-        // 縦方向：接地中はジャンプ受付、空中は重力
-        if self.on_ground {
+        // --- 縦方向 ---
+        // 浮遊なら接地関係なしに上下させるだけ
+        if self.floating {
             self.velocity_y = 0.0;
             if self.is_up_pressed {
-                self.velocity_y = 7.5; // ジャンプ初速
+                self.velocity_y = 7.5;
+            }
+            if self.is_down_pressed {
+                self.velocity_y = -7.5;
             }
         } else {
-            let gravity = 18.0;
-            self.velocity_y -= gravity * dt;
+            // 接地中はジャンプ受付、空中は重力
+            if self.on_ground {
+                if self.is_up_pressed {
+                    self.velocity_y = 7.5; // ジャンプ初速
+                }
+            } else {
+                let gravity = 18.0;
+                self.velocity_y -= gravity * dt;
+            }
         }
         let vertical = self.velocity_y * dt;
 
         Vec3::new(horizontal.x, vertical, horizontal.z)
     }
 
-    pub fn process_keyboard(&mut self, key: winit::keyboard::KeyCode, pressed: bool) -> bool {
+    pub fn process_keyboard(&mut self, key: winit::keyboard::KeyCode, pressed: bool, repeat: bool) -> bool {
         match key {
             winit::keyboard::KeyCode::KeyW | winit::keyboard::KeyCode::ArrowUp => {
                 self.is_forward_pressed = pressed;
@@ -198,6 +211,10 @@ impl CameraController {
             }
             winit::keyboard::KeyCode::KeyT => {
                 self.teleport = pressed;
+                true
+            }
+            winit::keyboard::KeyCode::KeyF if !repeat && pressed => {
+                self.floating = !self.floating;
                 true
             }
             _ => false,

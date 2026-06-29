@@ -1,7 +1,7 @@
 use noise::NoiseFn;
 
 const SEED: u32 = 531111891;
-const SEA_LEVEL: f64 = 10.0; // 平均的な地表（おおよそ Y16〜24 のイメージ）
+const SEA_LEVEL: f64 = 10.0; // 平均的な地表
 const DIRT_DEPTH: i32 = 4;
 const MAX_MOUNTAIN_HEIGHT: f64 = MAX_HEIGHT as f64;
 
@@ -24,7 +24,7 @@ fn surface_height(wx: f64, wz: f64) -> i32 {
     // 山岳
     let n = get_fbm(wx / 220.0, 0.0, wz / 220.0, SEED + 1, 5);
     let ridge = (1.0 - n.abs()).powi(3);
-    let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, SEED + 2, 2) * 0.5 + 0.85 - 0.0).max(0.0);
+    let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, SEED + 2, 2) * 0.5 /*ここからの数値が高いほど山が多くなる*/ + 0.85 - 0.0).max(0.0);
     let mountains = ridge * mask * MAX_MOUNTAIN_HEIGHT;
 
     (SEA_LEVEL + hills + mountains).round() as i32

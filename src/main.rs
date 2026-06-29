@@ -6,7 +6,7 @@ mod terrain;
 use std::sync::Arc;
 use std::time::Instant;
 use winit::{
-    application::ApplicationHandler, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId},
+    application::ApplicationHandler, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, monitor::VideoModeHandle, window::{Window, WindowId}
 };
 
 use crate::state::State;
@@ -41,7 +41,8 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = Arc::new(
             event_loop
-                .create_window(Window::default_attributes().with_fullscreen(Some(winit::window::Fullscreen::Borderless(None))))
+                // .create_window(Window::default_attributes().with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))))
+                .create_window(Window::default_attributes())
                 .unwrap(),
         );
 
@@ -84,7 +85,7 @@ impl ApplicationHandler for App {
                     if let winit::keyboard::PhysicalKey::Code(keycode) = key_event.physical_key {
                         state
                             .camera_controller
-                            .process_keyboard(keycode, key_event.state.is_pressed());
+                            .process_keyboard(keycode, key_event.state.is_pressed(), key_event.repeat);
                     }
                 }
             }
