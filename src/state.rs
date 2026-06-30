@@ -3,7 +3,8 @@ use crate::consts::*;
 use crate::{
     camera::{Camera, CameraController, CameraUniform},
     game::{self, BlockType},
-    terrain::{self, Chunk, create_terrain},
+    create_terrain::{self, create_terrain},
+    terrain::*,
 };
 
 use rayon::prelude::*;
@@ -16,9 +17,6 @@ use wgpu_text::{
     glyph_brush::{Section as TextSection, Text, ab_glyph::FontArc},
 };
 use winit::window::Window;
-
-// pub type CHUNK_BLOCKS = [[[BlockType; CHUNK_SIZE]; MAX_HEIGHT]; CHUNK_SIZE];
-pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
 
 // フォント
 static FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-VariableFont_wght.ttf");
@@ -353,7 +351,7 @@ impl State {
             .par_iter()
             .map(|&(cx, cz)| {
                 let blocks = create_terrain(cx, cz);
-                let (verts, inds) = terrain::build_chunk_mesh(&blocks, cx, cz);
+                let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
                 (cx, cz, blocks, verts, inds)
             })
             .collect();
@@ -394,7 +392,7 @@ impl State {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[
-                    crate::terrain::TerrainVertex::desc(), // スロット 0: チャンクメッシュ用 (VertexStepMode::Vertex)
+                    crate::create_terrain::TerrainVertex::desc(), // スロット 0: チャンクメッシュ用 (VertexStepMode::Vertex)
                 ],
                 compilation_options: Default::default(),
             },
@@ -557,8 +555,10 @@ impl State {
     fn collides_at(&self, eye: glam::Vec3) -> bool {
         let min_x = eye.x - PLAYER_HALF_WIDTH;
         let max_x = eye.x + PLAYER_HALF_WIDTH;
+
         let min_y = eye.y - PLAYER_HEIGHT;
         let max_y = eye.y;
+        
         let min_z = eye.z - PLAYER_HALF_WIDTH;
         let max_z = eye.z + PLAYER_HALF_WIDTH;
 

@@ -1,9 +1,11 @@
 mod camera;
 mod game;
 mod state;
-mod terrain;
+mod create_terrain;
 mod noise;
 mod consts;
+mod player;
+mod terrain;
 
 use std::sync::Arc;
 use std::time::Instant;
