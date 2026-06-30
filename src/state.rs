@@ -123,13 +123,9 @@ impl FpsCounter {
 
 /// レンダリング処理全体の状態を管理する構造体。
 pub struct State {
-    /// 描画対象のウィンドウサーフェス
     surface: wgpu::Surface<'static>,
-    /// GPUデバイス（バッファやパイプラインの作成などに使用）
     device: wgpu::Device,
-    /// GPU実行キュー（コマンド送信やデータ書き込みに使用）
     queue: wgpu::Queue,
-    /// サーフェスの構成設定情報
     config: wgpu::SurfaceConfiguration,
     /// 立方体を描画するためのグラフィックスパイプライン
     render_pipeline: wgpu::RenderPipeline,

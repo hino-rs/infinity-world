@@ -6,6 +6,10 @@ mod noise;
 mod consts;
 mod player;
 mod terrain;
+mod world;
+mod gpu;
+mod pipeline;
+mod app;
 
 use std::sync::Arc;
 use std::time::Instant;
