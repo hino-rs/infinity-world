@@ -1,25 +1,21 @@
+use crate::consts::*;
+
 use crate::{
-    camera::{Camera, CameraController, CameraUniform}, game::{self, BlockType}, terrain::{self, Chunk, create_terrain},
+    camera::{Camera, CameraController, CameraUniform},
+    game::{self, BlockType},
+    terrain::{self, Chunk, create_terrain},
 };
 
-use wgpu_text::{
-    glyph_brush::{ab_glyph::FontArc, Section as TextSection, Text},
-    BrushBuilder, TextBrush,
-};
-use std::sync::Arc;
-use wgpu::util::DeviceExt;
-use winit::window::Window;
-use web_time::Instant;
-use std::collections::VecDeque;
 use rayon::prelude::*;
-
-pub const CHUNK_SIZE: usize = 8;
-pub const CHUNK_AREA: usize = CHUNK_SIZE * MAX_HEIGHT;
-pub const MAX_HEIGHT: usize = 256;
-pub const WALK_SPEED: f32 = 6.0;
-pub const RADIUS: i32 = 1;
-pub const PLAYER_HALF_WIDTH: f32 = 0.3; // 横幅の半分（全幅 0.6）
-pub const PLAYER_HEIGHT: f32 = 1.8;     // 身長（足元から目まで）
+use std::collections::VecDeque;
+use std::sync::Arc;
+use web_time::Instant;
+use wgpu::util::DeviceExt;
+use wgpu_text::{
+    BrushBuilder, TextBrush,
+    glyph_brush::{Section as TextSection, Text, ab_glyph::FontArc},
+};
+use winit::window::Window;
 
 // pub type CHUNK_BLOCKS = [[[BlockType; CHUNK_SIZE]; MAX_HEIGHT]; CHUNK_SIZE];
 pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
@@ -66,9 +62,12 @@ impl FpsCounter {
         self.frame_times.push_back(delta);
 
         // FPS計算
-        let avg_delta = self.frame_times.iter().sum::<f64>()
-            / self.frame_times.len() as f64;
-        self.cached_fps = if avg_delta > 0.0 { 1.0 / avg_delta } else { 0.0 };
+        let avg_delta = self.frame_times.iter().sum::<f64>() / self.frame_times.len() as f64;
+        self.cached_fps = if avg_delta > 0.0 {
+            1.0 / avg_delta
+        } else {
+            0.0
+        };
 
         self.min_frame_time = self.min_frame_time.min(delta);
         self.max_frame_time = self.max_frame_time.max(delta);
@@ -91,12 +90,20 @@ impl FpsCounter {
 
     // 最小FPS
     fn min_fps(&self) -> f64 {
-        if self.max_frame_time > 0.0 { 1.0 / self.max_frame_time } else { 0.0 }
+        if self.max_frame_time > 0.0 {
+            1.0 / self.max_frame_time
+        } else {
+            0.0
+        }
     }
 
     // 最大FPS
     pub fn max_fps(&self) -> f64 {
-        if self.min_frame_time < f64::MAX { 1.0 / self.min_frame_time } else { 0.0 }
+        if self.min_frame_time < f64::MAX {
+            1.0 / self.min_frame_time
+        } else {
+            0.0
+        }
     }
 
     // サンプルのリセット
@@ -242,7 +249,7 @@ impl State {
             config.width as f32 / config.height as f32,
             90.0f32.to_radians(),
             0.1,
-            (CHUNK_SIZE * RADIUS as usize) as f32 * 1.5,
+            10000000000.0,
         );
 
         let mut camera_uniform = CameraUniform::new();
@@ -278,7 +285,7 @@ impl State {
             label: Some("camera_bind_group"),
         });
 
-        let camera_controller = CameraController::new(WALK_SPEED, 0.003);
+        let camera_controller = CameraController::new(PLAYER_WALK_SPEED, 0.003);
 
         // 深度バッファの初期作成
         let (depth_texture, depth_view) = Self::create_depth_texture(&device, &config);
@@ -286,7 +293,7 @@ impl State {
         let uniform_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,                             // シェーダー内の @binding(0) に対応
+                    binding: 0, // シェーダー内の @binding(0) に対応
                     visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT, // 頂点シェーダーから参照
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
@@ -372,7 +379,10 @@ impl State {
                 num_indices: inds.len() as u32,
             });
         }
-        println!("地形生成とメッシュ作成にかかった時間: {}ms", now.elapsed().as_millis());
+        println!(
+            "地形生成とメッシュ作成にかかった時間: {}ms",
+            now.elapsed().as_millis()
+        );
 
         // レンダリングパイプライン全体の作成
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -384,7 +394,7 @@ impl State {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[
-                    game::TerrainVertex::desc(), // スロット 0: チャンクメッシュ用 (VertexStepMode::Vertex)
+                    crate::terrain::TerrainVertex::desc(), // スロット 0: チャンクメッシュ用 (VertexStepMode::Vertex)
                 ],
                 compilation_options: Default::default(),
             },
@@ -395,7 +405,7 @@ impl State {
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE), 
+                    blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: Default::default(),
@@ -459,7 +469,7 @@ impl State {
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
                 depth_write_enabled: Some(false), // 空の深度は深度バッファに書き込まない
-                depth_compare: Some(wgpu::CompareFunction::LessEqual), 
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
@@ -473,8 +483,12 @@ impl State {
         });
 
         let font = FontArc::try_from_slice(FONT_BYTES).expect("フォント読み込み失敗");
-        let brush = BrushBuilder::using_font(font)
-            .build(&device, config.width, config.height, config.format);
+        let brush = BrushBuilder::using_font(font).build(
+            &device,
+            config.width,
+            config.height,
+            config.format,
+        );
 
         Self {
             surface,
@@ -582,8 +596,8 @@ impl State {
         self.camera_controller.on_ground = on_ground;
 
         self.queue.write_buffer(
-            &self.uniform_buffer, 
-            0, 
+            &self.uniform_buffer,
+            0,
             bytemuck::bytes_of(&GeneralUniforms {
                 time: time,
                 _p1: [0.0, 0.0, 0.0],
@@ -598,7 +612,7 @@ impl State {
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
     }
-    
+
     // ワールド座標のブロックを返す
     fn block_at_world(&self, wx: i32, wy: i32, wz: i32) -> BlockType {
         if wy < 0 || wy >= MAX_HEIGHT as i32 {
@@ -616,9 +630,7 @@ impl State {
             return BlockType::Air;
         };
 
-        let index = (lx as usize) * CHUNK_AREA
-                  + (wy as usize) * CHUNK_SIZE
-                  + (lz as usize);
+        let index = (lx as usize) * X_STRIDE + (wy as usize) * CHUNK_SIZE + (lz as usize);
         chunk.blocks[index]
     }
 
@@ -635,7 +647,8 @@ impl State {
             // サーフェス（描画ウィンドウ）のサイズ再設定
             self.surface.configure(&self.device, &self.config);
             // テキストブラシにプロジェクションサイズ変更を通知
-            self.brush.resize_view(new_size.width as f32, new_size.height as f32, &self.queue);
+            self.brush
+                .resize_view(new_size.width as f32, new_size.height as f32, &self.queue);
             // ウィンドウサイズに応じた大きさで深度テクスチャを再生成
             let (depth_texture, depth_view) =
                 Self::create_depth_texture(&self.device, &self.config);
@@ -718,11 +731,12 @@ impl State {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]); // スロット0にMVP行列のUniformを設定
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]); // スロット1 (カメラ)
-            
+
             // チャンク
             for chunk in &self.chunks {
                 render_pass.set_vertex_buffer(0, chunk.vertex_buffer.slice(..));
-                render_pass.set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass
+                    .set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 render_pass.draw_indexed(0..chunk.num_indices, 0, 0..1);
             }
 
@@ -743,7 +757,7 @@ impl State {
             .add_text(
                 Text::new(&fps_text)
                     .with_scale(20.0)
-                    .with_color([0.0, 0.0, 0.0, 1.0])
+                    .with_color([0.0, 0.0, 0.0, 1.0]),
             )
             .with_screen_position((10.0, 10.0));
 
@@ -751,17 +765,19 @@ impl State {
             .add_text(
                 Text::new(&coord_text)
                     .with_scale(20.0)
-                    .with_color([0.0, 0.0, 0.0, 1.0])
+                    .with_color([0.0, 0.0, 0.0, 1.0]),
             )
             .with_screen_position((10.0, 30.0));
 
-        self.brush.queue(&self.device, &self.queue, [&fps_section, &coord_section]).unwrap();
+        self.brush
+            .queue(&self.device, &self.queue, [&fps_section, &coord_section])
+            .unwrap();
 
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Text Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,         // スワップチェーンの TextureView
+                    view: &view, // スワップチェーンの TextureView
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load, // 前の3D描画結果の上に重ねるためLoadを使用

@@ -35,14 +35,57 @@ fn vs_main(
     out.tex_coords = tex_coords;
 
     var base_color = vec4f(1.0);
-    if block_type == 0u {
-        base_color = vec4f(0.0);
-    } else if block_type == 1u {
-        base_color = vec4f(0.4, 0.4, 0.4, 1.0);
-    } else if block_type == 2u {
-        base_color = vec4f(0.7, 0.45, 0.25, 1.0);
-    } else if block_type == 3u {
-        base_color = vec4f(0.48, 0.55, 0.26, 1.0);
+    switch block_type {
+        case 0u:    { base_color = vec4f(0.0); }                      // Air
+        case 1u:    { base_color = vec4f(0.4, 0.4, 0.4, 1.0); }       // Stone
+        case 2u:    { base_color = vec4f(0.7, 0.45, 0.25, 1.0); }     // Dirt
+        case 3u:    { base_color = vec4f(0.48, 0.55, 0.26, 1.0); }    // Grass
+        case 4u:    { base_color = vec4f(0.86, 0.78, 0.53, 1.0); }    // Sand
+        case 5u:    { base_color = vec4f(0.55, 0.52, 0.50, 1.0); }    // Gravel
+        case 6u:    { base_color = vec4f(0.95, 0.98, 0.98, 1.0); }    // SnowLayer
+        case 7u:    { base_color = vec4f(0.78, 0.68, 0.48, 1.0); }    // Sandstone
+        case 8u:    { base_color = vec4f(0.62, 0.58, 0.56, 1.0); }    // Clay
+
+        // --- 岩石系 ---
+        case 20u:   { base_color = vec4f(0.65, 0.55, 0.55, 1.0); }    // Granite
+        case 21u:   { base_color = vec4f(0.20, 0.20, 0.22, 1.0); }    // Basalt
+        case 22u:   { base_color = vec4f(0.78, 0.76, 0.70, 1.0); }    // Limestone
+        case 23u:   { base_color = vec4f(0.28, 0.31, 0.34, 1.0); }    // Slate
+        case 24u:   { base_color = vec4f(0.42, 0.40, 0.38, 1.0); }    // Shale
+        case 25u:   { base_color = vec4f(0.92, 0.92, 0.90, 1.0); }    // Chalk
+        case 26u:   { base_color = vec4f(0.48, 0.50, 0.45, 1.0); }    // Tuff
+        case 27u:   { base_color = vec4f(0.10, 0.08, 0.12, 1.0); }    // Obsidian
+        case 28u:   { base_color = vec4f(0.15, 0.15, 0.15, 1.0); }    // Bedrock
+
+        // --- 土壌・地表被覆系 ---
+        case 60u:   { base_color = vec4f(0.30, 0.45, 0.20, 1.0); }    // Moss
+        case 61u:   { base_color = vec4f(0.35, 0.25, 0.18, 1.0); }    // Podzol
+        case 62u:   { base_color = vec4f(0.28, 0.20, 0.15, 1.0); }    // Mud
+        case 63u:   { base_color = vec4f(0.22, 0.16, 0.12, 1.0); }    // Peat
+        case 64u:   { base_color = vec4f(0.45, 0.43, 0.42, 1.0); }    // Ash
+        case 65u:   { base_color = vec4f(0.65, 0.48, 0.33, 1.0); }    // CrackedEarth
+        case 66u:   { base_color = vec4f(0.40, 0.45, 0.50, 1.0); }    // Permafrost
+
+        // --- 水・凍り・溶岩 ---
+        case 100u:  { base_color = vec4f(0.15, 0.45, 0.80, 0.6); }    // Water
+        case 101u:  { base_color = vec4f(0.65, 0.85, 0.95, 0.7); }    // Ice
+        case 102u:  { base_color = vec4f(0.45, 0.75, 0.85, 0.9); }    // Glacier
+        case 103u:  { base_color = vec4f(0.98, 0.98, 1.0, 1.0); }     // SnowBlock
+        case 104u:  { base_color = vec4f(0.95, 0.35, 0.05, 1.0); }    // Lava
+
+        // --- 砕屑・稚積 ---
+        case 120u:  { base_color = vec4f(0.50, 0.48, 0.48, 1.0); }    // Shingle
+        case 121u:  { base_color = vec4f(0.60, 0.58, 0.58, 1.0); }    // Pebbles
+        case 122u:  { base_color = vec4f(0.62, 0.55, 0.45, 1.0); }    // Silt
+        case 123u:  { base_color = vec4f(0.58, 0.56, 0.54, 1.0); }    // Scree
+
+        // --- 鉱脈など ---
+        case 150u:  { base_color = vec4f(0.12, 0.12, 0.12, 1.0); }    // CoalSeam
+        case 151u:  { base_color = vec4f(0.25, 0.65, 0.55, 1.0); }    // CopperPatina
+        case 152u:  { base_color = vec4f(0.65, 0.25, 0.15, 1.0); }    // IronStain
+        case 153u:  { base_color = vec4f(0.88, 0.90, 0.92, 1.0); }    // QuartzVein
+
+        default:    { base_color = vec4f(1.0, 0.0, 1.0, 1.0); }       // 例外
     }
 
     out.color = vec4f(base_color.rgb * ao_factor, base_color.a);

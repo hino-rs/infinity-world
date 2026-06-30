@@ -1,12 +1,58 @@
-use noise::NoiseFn;
+use crate::consts::*;
+use crate::{game::BlockType, state::ChunkBlocks};
+use crate::noise::*;
 
-const SEED: u32 = 531111891;
-const SEA_LEVEL: f64 = 10.0; // 平均的な地表
-const DIRT_DEPTH: i32 = 4;
-const MAX_MOUNTAIN_HEIGHT: f64 = MAX_HEIGHT as f64;
 
-use crate::{game::BlockType, state::{CHUNK_AREA, CHUNK_SIZE, ChunkBlocks, MAX_HEIGHT}};
-use crate::game::TerrainVertex;
+/// 地形の頂点データ
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct TerrainVertex {
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
+    pub block_type: u32,
+    pub ao_factor: f32,
+}
+
+impl TerrainVertex {
+    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<TerrainVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: 12,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: 20,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Uint32,
+                },
+                wgpu::VertexAttribute {
+                    offset: 24,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32,
+                },
+            ],
+        }
+    }
+}
+
+
+pub fn calc_ao(side1: bool, side2: bool, corner: bool) -> u8 {
+    if side1 && side2 {
+        return 0;
+    }
+    3 - (side1 as u8 + side2 as u8 + corner as u8)
+}
+
 
 pub struct Chunk {
     pub coord: (i32, i32),
@@ -24,7 +70,7 @@ fn surface_height(wx: f64, wz: f64) -> i32 {
     // 山岳
     let n = get_fbm(wx / 220.0, 0.0, wz / 220.0, SEED + 1, 5);
     let ridge = (1.0 - n.abs()).powi(3);
-    let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, SEED + 2, 2) * 0.5 /*ここからの数値が高いほど山が多くなる*/ + 0.85 - 0.0).max(0.0);
+    let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, SEED + 2, 2) * 0.5 /*ここからの数値が高いほど山が多くなる*/ + 0.2 - 0.0).max(0.0);
     let mountains = ridge * mask * MAX_MOUNTAIN_HEIGHT;
 
     (SEA_LEVEL + hills + mountains).round() as i32
@@ -39,52 +85,8 @@ fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
         return false;    
     }
 
-    let index = (x as usize) * CHUNK_AREA + (y as usize) * CHUNK_SIZE + (z as usize);
+    let index = (x as usize) * X_STRIDE + (y as usize) * CHUNK_SIZE + (z as usize);
     blocks[index] != BlockType::Air
-}
-
-fn value_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
-    noise::Value::new(seed).get([x, y, z])
-}
-
-fn perlin_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
-    noise::Perlin::new(seed).get([x, y, z])
-}
-
-fn simplex_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
-    noise::OpenSimplex::new(seed).get([x, y, z])
-}
-
-fn ridged_multi_perlin_noise(x: f64, y: f64, z: f64, seed: u32) -> f64 {
-    noise::RidgedMulti::<noise::Perlin>::new(seed).get([x, y, z])
-}
-
-
-fn get_fbm(x: f64, y: f64, z: f64, seed: u32, octaves: u32) -> f64 {
-    let mut sum = 0.0;
-    let mut amplitude = 0.5;
-    let mut frequency = 1.0;
-    let mut max_val = 0.0;
-
-    // 空隙性
-    let lacunarity = 2.0;
-    // 持続度
-    let persistence = 0.5;
-
-    for i in 0..octaves {
-        let n = simplex_noise(x * frequency, y * frequency, z * frequency, seed + i * 131);
-        
-        sum += n * amplitude;
-        max_val += amplitude;
-        amplitude *= persistence;
-        frequency *= lacunarity;
-    }
-
-    sum / max_val
-}
-
-pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
-    a + (b - a) * t
 }
 
 pub fn create_terrain(chunk_x: i32, chunk_z: i32) -> ChunkBlocks {
@@ -100,7 +102,7 @@ pub fn create_terrain(chunk_x: i32, chunk_z: i32) -> ChunkBlocks {
             // 底から地表高さまで詰めるだけ（上はデフォルトの Air のまま）
             for y in 0..=h as usize {
                 let yi = y as i32;
-                let index = x * CHUNK_AREA + y * CHUNK_SIZE + z;
+                let index = x * X_STRIDE + y * CHUNK_SIZE + z;
                 blocks[index] = if yi == h {
                     if h > 60 { BlockType::Stone } else { BlockType::Grass } // 高所は岩肌
                 } else if yi >= h - DIRT_DEPTH {
@@ -131,7 +133,7 @@ pub fn build_chunk_mesh(
     for x in 0..CHUNK_SIZE {
         for y in 0..MAX_HEIGHT {
             for z in 0..CHUNK_SIZE {
-                let index = x * CHUNK_AREA + y * CHUNK_SIZE + z;
+                let index = x * X_STRIDE + y * CHUNK_SIZE + z;
                 let block = blocks[index];
 
                 if block == BlockType::Air {
@@ -150,10 +152,10 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi, yi + 1, zi, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + 0.5, bz - 0.5],
@@ -190,10 +192,10 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi, yi - 1, zi, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
@@ -230,10 +232,10 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi, yi, zi - 1, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
@@ -270,10 +272,10 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi, yi, zi + 1, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz + 0.5],
@@ -310,10 +312,10 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi - 1, yi, zi, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
@@ -350,10 +352,10 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi + 1, yi, zi, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (crate::game::calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx + 0.5, by - 0.5, bz - 0.5],

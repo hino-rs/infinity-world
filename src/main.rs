@@ -2,6 +2,8 @@ mod camera;
 mod game;
 mod state;
 mod terrain;
+mod noise;
+mod consts;
 
 use std::sync::Arc;
 use std::time::Instant;

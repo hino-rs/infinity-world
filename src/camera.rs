@@ -1,6 +1,5 @@
+use crate::consts::*;
 use glam::{Mat4, Vec3};
-
-use crate::state::WALK_SPEED;
 
 pub struct Camera {
     pub eye: Vec3,
@@ -60,11 +59,7 @@ impl Camera {
 
     pub fn xyz(&self) -> (f32, f32, f32) {
         let eye = self.eye;
-        (
-            eye.x,
-            eye.y,
-            eye.z,
-        )
+        (eye.x, eye.y, eye.z)
     }
 
     // ヨーとピッチからカメラんの前方ベクトルを計算する
@@ -124,27 +119,35 @@ impl CameraController {
     pub fn compute_move(&mut self, camera: &mut Camera, dt: f32) -> Vec3 {
         if self.teleport {
             camera.eye.x = 0.0;
-            camera.eye.z = 0.0;    
+            camera.eye.z = 0.0;
             camera.eye.y = 300.0;
             return Vec3::ZERO;
         }
-        
+
         // 地面に水平な前方・右方向（XZ平面）
         let (sin_yaw, cos_yaw) = camera.yaw.sin_cos();
         let forward_ground = Vec3::new(sin_yaw, 0.0, -cos_yaw).normalize();
         let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize();
 
         self.speed = if self.is_dash_pressed {
-            WALK_SPEED * 5.0
+            PLAYER_WALK_SPEED * 5.0
         } else {
-            WALK_SPEED
+            PLAYER_WALK_SPEED
         };
 
         let mut move_dir = Vec3::ZERO;
-        if self.is_forward_pressed  { move_dir += forward_ground; }
-        if self.is_backward_pressed { move_dir -= forward_ground; }
-        if self.is_right_pressed    { move_dir += right_ground; }
-        if self.is_left_pressed     { move_dir -= right_ground; }
+        if self.is_forward_pressed {
+            move_dir += forward_ground;
+        }
+        if self.is_backward_pressed {
+            move_dir -= forward_ground;
+        }
+        if self.is_right_pressed {
+            move_dir += right_ground;
+        }
+        if self.is_left_pressed {
+            move_dir -= right_ground;
+        }
 
         // 水平移動量（斜めも同じ速さになるよう正規化）
         let horizontal = if move_dir != Vec3::ZERO {
@@ -179,7 +182,12 @@ impl CameraController {
         Vec3::new(horizontal.x, vertical, horizontal.z)
     }
 
-    pub fn process_keyboard(&mut self, key: winit::keyboard::KeyCode, pressed: bool, repeat: bool) -> bool {
+    pub fn process_keyboard(
+        &mut self,
+        key: winit::keyboard::KeyCode,
+        pressed: bool,
+        repeat: bool,
+    ) -> bool {
         match key {
             winit::keyboard::KeyCode::KeyW | winit::keyboard::KeyCode::ArrowUp => {
                 self.is_forward_pressed = pressed;
