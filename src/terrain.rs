@@ -101,6 +101,10 @@ impl Terrain {
         }
     }
 
+    pub fn count_blocktype(&self, target: BlockType) -> usize {
+        self.chunks[&(0,0)].blocks.iter().filter(|&&block| block == target).count()
+    }
+
     // 最初は初期ポジが位置するチャンクだけ作る
     pub fn new(device: &wgpu::Device, seed: u32, initial_position: Vec3) -> Self {
         let x = initial_position.x;

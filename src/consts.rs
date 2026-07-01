@@ -12,7 +12,7 @@ pub const MAX_MOUNTAIN_HEIGHT: f64 = MAX_HEIGHT as f64;
 
 // --- プレイヤー関係 ---
 pub const PLAYER_WALK_SPEED: f32 = 6.0;
-pub const RADIUS: i32 = 32; // // プレイヤーを中心としたチャンク生成対象の半径
+pub const RADIUS: i32 = 12; // // プレイヤーを中心としたチャンク生成対象の半径
 pub const PLAYER_HALF_WIDTH: f32 = 0.3; // 横幅の半分（全幅 0.6）
 pub const PLAYER_HEIGHT: f32 = 1.8; // 身長（足元から目まで）
 

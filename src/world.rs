@@ -3,6 +3,7 @@ use web_time::Instant;
 
 use crate::camera::Camera;
 use crate::consts::RADIUS;
+use crate::game::BlockType::Air;
 use crate::player::{Player, PlayerController};
 use crate::terrain::Terrain;
 
@@ -65,5 +66,6 @@ impl World {
         if self.terrain.chunks.len() > ((RADIUS*2+1)*(RADIUS*2+1)) as usize {
             self.terrain.clear_chunks(self.player.pos_xzi());
         }
+
     }
 }
