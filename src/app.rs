@@ -11,7 +11,7 @@ use web_time::Instant;
 use crate::camera::CameraGpu;
 use crate::fps::FpsCounter;
 use crate::gpu::GpuContext;
-use crate::render::Render;
+use crate::render_info::RenderInfo;
 use crate::world::World;
 use crate::pipeline::PipelineRegistry;
 
@@ -25,7 +25,7 @@ pub struct Application {
     pub last_render_time: Instant,
     pub camera_gpu: Option<CameraGpu>,
     pub time: Instant,
-    pub render: Option<Render>,
+    pub render: Option<RenderInfo>,
     pub fps: FpsCounter,
     pub brush: Option<TextBrush<FontArc>>,
 }
@@ -67,7 +67,7 @@ impl ApplicationHandler for Application {
         let pipelines = PipelineRegistry::new(&gpu.device, &gpu.config);
         let world = World::new(&gpu.device, gpu.config.width as f32 / gpu.config.height as f32);
         let camera_gpu = CameraGpu::new(&gpu.device, &pipelines.camera_uniform_bind_group_layout, &world.camera);
-        let render = Render::new(&gpu.device, &gpu.config);
+        let render = RenderInfo::new(&gpu.device, &gpu.config);
         let brush = BrushBuilder::using_font(font).build(
             &gpu.device,
             gpu.config.width,

@@ -1,7 +1,5 @@
 use wgpu::util::DeviceExt;
 
-use crate::state::{GeneralUniform};
-
 pub struct PipelineRegistry {
     pub general_uniform_bind_group_layout: wgpu::BindGroupLayout,
     pub camera_uniform_bind_group_layout: wgpu::BindGroupLayout,
@@ -10,6 +8,13 @@ pub struct PipelineRegistry {
     pub render_pipeline_layout: wgpu::PipelineLayout,
     pub blocks_render_pipeline: wgpu::RenderPipeline,
     pub sky_render_pipeline: wgpu::RenderPipeline,   
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct GeneralUniform {
+    time: f32,
+    _p1: [f32; 3],
 }
 
 impl PipelineRegistry {
@@ -54,7 +59,7 @@ impl PipelineRegistry {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
                     Some(&general_uniform_bind_group_layout),
-                    Some(&camera_uniform_bind_group_layout), // バインドグループ1として登録
+                    Some(&camera_uniform_bind_group_layout), 
                 ],
                 immediate_size: 0,
             });

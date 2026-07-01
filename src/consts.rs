@@ -1,7 +1,6 @@
 #![allow(unused)]
 
 // --- チャンク関係 ---
-pub const SEED: u32 = 531111891;
 pub const CHUNK_SIZE: usize = 16;
 pub const MAX_HEIGHT: usize = 256;
 pub const X_STRIDE: usize = CHUNK_SIZE * MAX_HEIGHT;

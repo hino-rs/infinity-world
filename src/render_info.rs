@@ -1,11 +1,9 @@
-
-
-pub struct Render {
+pub struct RenderInfo {
     pub depth_texture: wgpu::Texture,
     pub depth_view: wgpu::TextureView,
 }
 
-impl Render {
+impl RenderInfo {
     pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> Self {
         let size = wgpu::Extent3d {
             width: config.width,

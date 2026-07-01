@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use winit::window::Window;
 
-use crate::{camera::{Camera, CameraGpu}, fps::FpsCounter, pipeline::PipelineRegistry, render::Render, terrain::Chunk};
+use crate::{camera::{Camera, CameraGpu}, fps::FpsCounter, pipeline::PipelineRegistry, render_info::RenderInfo, terrain::Chunk};
 
 use wgpu_text::{
     BrushBuilder, TextBrush,
@@ -77,7 +77,7 @@ impl GpuContext {
     pub fn resize(
         &mut self, 
         new_size: winit::dpi::PhysicalSize<u32>,
-        render_info: &mut Render,
+        render_info: &mut RenderInfo,
     ) {
         if new_size.width > 0 && new_size.height > 0 {
             self.config.width = new_size.width;
@@ -89,7 +89,7 @@ impl GpuContext {
             //     .resize_view(new_size.width as f32, new_size.height as f32, &self.queue);
             // ウィンドウサイズに応じた大きさで深度テクスチャを再生成
             let (depth_texture, depth_view) =
-                Render::create_depth_texture(&self.device, &self.config);
+                RenderInfo::create_depth_texture(&self.device, &self.config);
             render_info.depth_texture = depth_texture;
             render_info.depth_view = depth_view;
         }
@@ -97,7 +97,7 @@ impl GpuContext {
 
     pub fn render(
         &self, 
-        render_info: &Render,
+        render_info: &RenderInfo,
         pipelines: &PipelineRegistry,
         camera_gpu: &CameraGpu,
         chunks: &Vec<Chunk>,

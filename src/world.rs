@@ -2,7 +2,6 @@ use glam::Vec3;
 use web_time::Instant;
 
 use crate::camera::Camera;
-use crate::consts::PLAYER_WALK_SPEED;
 use crate::player::{Player, PlayerController};
 use crate::terrain::Terrain;
 
@@ -14,7 +13,6 @@ pub struct World {
     pub time: Instant,
     pub speed: f32,
     pub seed: u32,
-    // pub buffer: wgpu::Buffer,
 }
 
 impl World {

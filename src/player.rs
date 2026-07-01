@@ -209,6 +209,8 @@ impl PlayerController {
             if self.on_ground {
                 if self.is_up_pressed {
                     self.velocity_y = 7.5; // ジャンプ初速
+                } else {
+                    self.velocity_y = 0.0;
                 }
             } else {
                 let gravity = 18.0;
