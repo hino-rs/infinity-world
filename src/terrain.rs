@@ -21,7 +21,7 @@ pub struct Terrain {
 }
 
 impl Terrain {
-    pub fn new(device: &wgpu::Device) -> Self {
+    pub fn new(device: &wgpu::Device, seed: u32) -> Self {
         let now = Instant::now();
         // 座標リストを作る
         let coords: Vec<(i32, i32)> = (-RADIUS..=RADIUS)
@@ -32,7 +32,7 @@ impl Terrain {
         let cpu_results: Vec<_> = coords
             .par_iter()
             .map(|&(cx, cz)| {
-                let blocks = create_terrain::create_terrain(cx, cz);
+                let blocks = create_terrain::create_terrain(cx, cz, seed);
                 let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
                 (cx, cz, blocks, verts, inds)
             })

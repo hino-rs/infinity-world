@@ -53,14 +53,14 @@ pub fn calc_ao(side1: bool, side2: bool, corner: bool) -> u8 {
 }
 
 // 1列分の地表の高さを2Dで決める
-pub fn surface_height(wx: f64, wz: f64) -> i32 {
+pub fn surface_height(wx: f64, wz: f64, seed: u32) -> i32 {
     // 平地の起伏
-    let hills = get_fbm(wx / 80.0, 0.0, wz / 80.0, SEED, 4) * 6.0;
+    let hills = get_fbm(wx / 80.0, 0.0, wz / 80.0, seed, 4) * 6.0;
 
     // 山岳
-    let n = get_fbm(wx / 220.0, 0.0, wz / 220.0, SEED + 1, 5);
+    let n = get_fbm(wx / 220.0, 0.0, wz / 220.0, seed + 1, 5);
     let ridge = (1.0 - n.abs()).powi(3);
-    let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, SEED + 2, 2) * 0.5 /*ここからの数値が高いほど山が多くなる*/ + 0.2 - 0.0).max(0.0);
+    let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, seed + 2, 2) * 0.5 /*ここからの数値が高いほど山が多くなる*/ + 0.2 - 0.0).max(0.0);
     let mountains = ridge * mask * MAX_MOUNTAIN_HEIGHT;
 
     (SEA_LEVEL + hills + mountains).round() as i32
@@ -79,7 +79,7 @@ pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
     blocks[index] != BlockType::Air
 }
 
-pub fn create_terrain(chunk_x: i32, chunk_z: i32) -> ChunkBlocks {
+pub fn create_terrain(chunk_x: i32, chunk_z: i32, seed: u32) -> ChunkBlocks {
     let mut blocks = [BlockType::Air; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
 
     for x in 0..CHUNK_SIZE {
@@ -87,7 +87,7 @@ pub fn create_terrain(chunk_x: i32, chunk_z: i32) -> ChunkBlocks {
             let wx = (chunk_x * CHUNK_SIZE as i32 + x as i32) as f64;
             let wz = (chunk_z * CHUNK_SIZE as i32 + z as i32) as f64;
 
-            let h = surface_height(wx, wz).clamp(1, MAX_HEIGHT as i32 - 1);
+            let h = surface_height(wx, wz, seed).clamp(1, MAX_HEIGHT as i32 - 1);
 
             // 底から地表高さまで詰めるだけ（上はデフォルトの Air のまま）
             for y in 0..=h as usize {

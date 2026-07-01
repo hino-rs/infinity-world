@@ -34,7 +34,8 @@ impl World {
             1000000000.0,
         );
 
-        let terrain = Terrain::new(device);
+        let seed = rand::random::<u32>();
+        let terrain = Terrain::new(device, seed);
 
         Self {
             player,
@@ -43,7 +44,7 @@ impl World {
             terrain,
             time: Instant::now(),
             speed: 1.0,
-            seed: rand::random::<u32>(),
+            seed,
         }
     }
 

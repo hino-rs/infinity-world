@@ -150,43 +150,6 @@ impl Player {
 
         on_ground
     }
-    // pub fn move_player(&mut self, delta: Vec3) -> bool {
-    //     let mut on_ground = false;
-
-    //     // --- X軸（壁判定・横） ---
-    //     let mut try_eye = self.camera.eye;
-    //     try_eye.x += delta.x;
-    //     if self.collides_at(try_eye) {
-    //         // 壁にぶつかった → X の移動は捨てる（= 壁に沿って滑る）
-    //     } else {
-    //         self.player.position.x = try_eye.x;
-    //     }
-
-    //     // --- Z軸（壁判定・奥行き） ---
-    //     let mut try_eye = self.camera.eye;
-    //     try_eye.z += delta.z;
-    //     if self.collides_at(try_eye) {
-    //         // Z の移動を捨てる
-    //     } else {
-    //         self.player.position.z = try_eye.z;
-    //     }
-
-    //     // --- Y軸（地面・天井） ---
-    //     let mut try_eye = self.camera.eye;
-    //     try_eye.y += delta.y;
-    //     if self.collides_at(try_eye) {
-    //         // 縦にぶつかった
-    //         if delta.y < 0.0 {
-    //             on_ground = true; // 下向きで衝突 → 着地
-    //         }
-    //         // 上向きで衝突なら頭をぶつけた。いずれも縦速度を殺す
-    //         self.camera_controller.velocity_y = 0.0;
-    //     } else {
-    //         self.player.position.y = try_eye.y;
-    //     }
-
-    //     on_ground
-    // }
 }
 
 impl PlayerController {

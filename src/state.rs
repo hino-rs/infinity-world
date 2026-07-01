@@ -554,7 +554,7 @@ pub struct GeneralUniform {
 
 //     //     let min_y = eye.y - PLAYER_HEIGHT;
 //     //     let max_y = eye.y;
-        
+
 //     //     let min_z = eye.z - PLAYER_HALF_WIDTH;
 //     //     let max_z = eye.z + PLAYER_HALF_WIDTH;
 
