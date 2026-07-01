@@ -1,4 +1,5 @@
 use crate::consts::*;
+use wgpu::util::DeviceExt;
 use glam::{Mat4, Vec3};
 
 pub struct Camera {
@@ -9,6 +10,47 @@ pub struct Camera {
     pub fovy: f32,
     pub znear: f32,
     pub zfar: f32,
+}
+
+pub struct CameraGpu {
+    pub uniform: CameraUniform,
+    pub buffer: wgpu::Buffer,  
+    pub bind_group: wgpu::BindGroup, 
+}
+
+impl CameraGpu {
+    pub fn new(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, camera: &Camera) -> Self {
+        let mut uniform = CameraUniform::new();
+        uniform.update_view_proj(&camera);
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&[uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+            label: Some("camera bind group"),
+        });
+
+        Self {
+            uniform,
+            buffer,
+            bind_group,
+        }
+    }
+
+    pub fn update(&mut self, queue: &wgpu::Queue, camera: &Camera) {
+        self.uniform.update_view_proj(camera);
+        queue.write_buffer(
+            &self.buffer,
+            0, 
+            bytemuck::cast_slice(&[self.uniform]),
+        );
+    }
 }
 
 #[repr(C)]

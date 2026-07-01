@@ -1,7 +1,12 @@
+use wgpu::util::DeviceExt;
+
+use crate::state::{GeneralUniform};
+
 pub struct PipelineRegistry {
     pub general_uniform_bind_group_layout: wgpu::BindGroupLayout,
     pub camera_uniform_bind_group_layout: wgpu::BindGroupLayout,
-
+    pub general_uniform_buffer: wgpu::Buffer,
+    pub general_uniform_bind_group: wgpu::BindGroup,
     pub render_pipeline_layout: wgpu::PipelineLayout,
     pub blocks_render_pipeline: wgpu::RenderPipeline,
     pub sky_render_pipeline: wgpu::RenderPipeline,   
@@ -152,13 +157,44 @@ impl PipelineRegistry {
             cache: None,
         });
 
+        let general_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("General Uniform Buffer"),
+            contents: bytemuck::bytes_of(&GeneralUniform {
+                time: 0.0,
+                _p1: [0.,0.,0.],
+            }),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let general_uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &general_uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: general_uniform_buffer.as_entire_binding(),
+            }],
+            label: Some("Uniform Bind Group"),
+        });
+
         Self {
             general_uniform_bind_group_layout,
             camera_uniform_bind_group_layout,
+            general_uniform_buffer,
+            general_uniform_bind_group,
 
             render_pipeline_layout,
             blocks_render_pipeline,
             sky_render_pipeline,
         }
+    }
+
+    pub fn update_general_uniform(&self, queue: &wgpu::Queue, time: f32) {
+        queue.write_buffer(
+            &self.general_uniform_buffer,
+            0,
+            bytemuck::bytes_of(&GeneralUniform {
+                time: time,
+                _p1: [0.0, 0.0, 0.0],
+            }),
+        );
     }
 }

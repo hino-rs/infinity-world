@@ -1,7 +1,10 @@
-use glam::Vec3;
+use web_time::Instant;
+use rayon::prelude::*;
+use wgpu::util::DeviceExt;
 
 use crate::game::BlockType::Air;
 use crate::{consts::*, game::BlockType, player::Aabb};
+use crate::create_terrain;
 
 pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
 
@@ -14,10 +17,57 @@ pub struct Chunk {
 }
 
 pub struct Terrain {
-    chunks: Vec<Chunk>,
+    pub chunks: Vec<Chunk>,
 }
 
 impl Terrain {
+    pub fn new(device: &wgpu::Device) -> Self {
+        let now = Instant::now();
+        // 座標リストを作る
+        let coords: Vec<(i32, i32)> = (-RADIUS..=RADIUS)
+            .flat_map(|cx| (-RADIUS..=RADIUS).map(move |cz| (cx, cz)))
+            .collect();
+
+        // CPU処理だけ並列化
+        let cpu_results: Vec<_> = coords
+            .par_iter()
+            .map(|&(cx, cz)| {
+                let blocks = create_terrain::create_terrain(cx, cz);
+                let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
+                (cx, cz, blocks, verts, inds)
+            })
+            .collect();
+
+        let mut chunks = Vec::with_capacity(cpu_results.len());
+        for (cx, cz, blocks, verts, inds) in cpu_results {
+            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Vertex Buffer"),
+                contents: bytemuck::cast_slice(&verts),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Index Buffer"),
+                contents: bytemuck::cast_slice(&inds),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+            chunks.push(Chunk {
+                coord: (cx, cz),
+                blocks,
+                vertex_buffer,
+                index_buffer,
+                num_indices: inds.len() as u32,
+            });
+        }
+        println!(
+            "地形生成とメッシュ作成にかかった時間: {}ms",
+            now.elapsed().as_millis()
+        );
+
+        Self {
+            chunks
+        }
+    }
+
     // 指定のワールド座標がソリッドか
     pub fn is_solid_world(&self, wx: i32, wy: i32, wz: i32) -> bool {
         self.block_at_world(wx, wy, wz) != BlockType::Air

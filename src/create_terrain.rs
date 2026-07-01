@@ -53,7 +53,7 @@ pub fn calc_ao(side1: bool, side2: bool, corner: bool) -> u8 {
 }
 
 // 1列分の地表の高さを2Dで決める
-fn surface_height(wx: f64, wz: f64) -> i32 {
+pub fn surface_height(wx: f64, wz: f64) -> i32 {
     // 平地の起伏
     let hills = get_fbm(wx / 80.0, 0.0, wz / 80.0, SEED, 4) * 6.0;
 
@@ -68,7 +68,7 @@ fn surface_height(wx: f64, wz: f64) -> i32 {
 
 // 周辺ブロックが不透明ブロックかどうかを調べる
 // チャンク外は空気(非ソリッド)とみなす
-fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
+pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
     if x < 0 || x >= CHUNK_SIZE as i32 ||
        y < 0 || y >= MAX_HEIGHT as i32 ||
        z < 0 || z >= CHUNK_SIZE as i32 {
