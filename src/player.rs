@@ -1,5 +1,5 @@
 use glam::*;
-use crate::{camera::Camera, consts::*, terrain::Terrain};
+use crate::{camera::Camera, consts::*, terrain::Terrain, utils::{XZf, XZi}};
 
 /// firstが左下手前、endが右上奥
 pub struct Aabb {
@@ -20,7 +20,7 @@ impl Aabb {
     pub fn compress(full: AabbFull) -> Aabb {
         Aabb {
             first: Vec3::new(full.min_x, full.max_y, full.max_z),
-            end: Vec3::new(full.max_x, full.min_y, full.min_z)
+            end: Vec3::new(full.max_x, full.min_y, full.min_z),
         }
     }
 
@@ -49,7 +49,6 @@ impl Aabb {
         let y2 = pos.y;
         let z1 = pos.z - PLAYER_HALF_WIDTH;
         let z2 = pos.z + PLAYER_HALF_WIDTH;
-
 
         let min_x = x1.min(x2);
         let max_x = x1.max(x2);
@@ -95,6 +94,16 @@ impl Player {
             position,
             velocity_y: 0.0,
         }
+    }
+
+    #[inline]
+    pub fn pos_xzi(&self) -> XZi {
+        XZi::new(self.position.x as i32, self.position.z as i32)
+    }
+
+    #[inline]
+    pub fn pos_xzf(&self) -> XZf {
+        XZf::new(self.position.x, self.position.z)
     }
 
     pub fn aabb(&self) -> Aabb {

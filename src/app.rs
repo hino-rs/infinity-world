@@ -136,12 +136,13 @@ impl ApplicationHandler for Application {
                     &mut self.brush,
                 ) {
                     let time = Instant::now().duration_since(self.time).as_secs_f32();
-                    world.update(dt);
+                    world.update(dt, &gpu.device);
                     pipelines.update_general_uniform(&gpu.queue, time);
                     camera_gpu.update(&gpu.queue, &world.camera);
                     let _delta = self.fps.tick();
                     gpu.render(render, pipelines, camera_gpu, &world.terrain.chunks, &world.camera, &self.fps, brush);
-                    window.request_redraw();}
+                    window.request_redraw();
+                }
             }
             _ => {}
         }

@@ -79,7 +79,7 @@ pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
     blocks[index] != BlockType::Air
 }
 
-pub fn create_terrain(chunk_x: i32, chunk_z: i32, seed: u32) -> ChunkBlocks {
+pub fn create_chunk(chunk_x: i32, chunk_z: i32, seed: u32) -> ChunkBlocks {
     let mut blocks = [BlockType::Air; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
 
     for x in 0..CHUNK_SIZE {
@@ -105,7 +105,6 @@ pub fn create_terrain(chunk_x: i32, chunk_z: i32, seed: u32) -> ChunkBlocks {
     }
     blocks
 }
-
 
 pub fn build_chunk_mesh(
     blocks: &ChunkBlocks,

@@ -11,6 +11,7 @@ mod pipeline;
 mod app;
 mod render_info;
 mod fps;
+mod utils;
 
 use winit::event_loop::{ControlFlow, EventLoop};
 

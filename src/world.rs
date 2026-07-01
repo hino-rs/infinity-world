@@ -1,4 +1,4 @@
-use glam::Vec3;
+use glam::{Vec3, Vec3Swizzles};
 use web_time::Instant;
 
 use crate::camera::Camera;
@@ -10,7 +10,8 @@ pub struct World {
     pub player_controller: PlayerController,
     pub camera: Camera,
     pub terrain: Terrain,
-    pub time: Instant,
+    pub time: u128,
+    pub angle: f32,
     pub speed: f32,
     pub seed: u32,
 }
@@ -40,13 +41,16 @@ impl World {
             player_controller,
             camera,
             terrain,
-            time: Instant::now(),
+            time: 0,
+            angle: 0.0,
             speed: 1.0,
             seed,
         }
     }
 
-    pub fn update(&mut self, dt: f32) {
+    pub fn update(&mut self, dt: f32, device: &wgpu::Device) {
+        self.time += 1;
+
         // このフレームの希望移動量を計算 コントローラーは前フレームのon_groundを参照する
         let delta = self.player_controller.compute_move(&mut self.player, &mut self.camera, dt);
         
@@ -58,5 +62,7 @@ impl World {
         
         // カメラをプレイヤーへ
         self.camera.pursue_target(self.player.position);
+
+        self.terrain.add_chunks(device, self.seed, self.player.pos_xzi());
     }
 }
