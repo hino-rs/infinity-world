@@ -19,10 +19,14 @@ pub struct World {
 }
 
 impl World {
-    pub fn new(device: &wgpu::Device, aspect: f32) -> World {
+    pub fn new(
+        device: &wgpu::Device, 
+        aspect: f32,
+        storage_layout: &wgpu::BindGroupLayout,
+    ) -> World {
         let seed = rand::random::<u32>();
         let initial_position = Vec3::new(0.0, 100.0, 0.0);
-        let terrain = Terrain::new(device, seed, initial_position);
+        let terrain = Terrain::new(device, seed, initial_position, storage_layout);
         let player = Player::new(initial_position);
         let player_controller = PlayerController::default();
 
@@ -48,7 +52,7 @@ impl World {
         }
     }
 
-    pub fn update(&mut self, dt: f32, device: &wgpu::Device) {
+    pub fn update(&mut self, dt: f32, device: &wgpu::Device, storage_layout: &wgpu::BindGroupLayout) {
         // このフレームの希望移動量を計算 コントローラーは前フレームのon_groundを参照する
         let delta = self.player_controller.compute_move(&mut self.player, &mut self.camera, dt);
         
@@ -62,7 +66,7 @@ impl World {
         self.camera.pursue_target(self.player.position);
 
         // チャンク生成と掃除
-        self.terrain.add_chunks(device, self.seed, self.player.pos_xzi());
+        self.terrain.add_chunks(device, self.seed, self.player.pos_xzi(), storage_layout);
         if self.terrain.chunks.len() > ((RADIUS*2+1)*(RADIUS*2+1)) as usize {
             self.terrain.clear_chunks(self.player.pos_xzi());
         }

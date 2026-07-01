@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use winit::window::Window;
 
-use crate::{camera::{Camera, CameraGpu}, fps::FpsCounter, pipeline::PipelineRegistry, render_info::RenderInfo, terrain::Chunk};
+use crate::{camera::{Camera, CameraGpu}, fps::FpsCounter, pipeline::PipelineRegistry, render_info::RenderInfo, terrain::{Chunk, Terrain}};
 
 use wgpu_text::{
     BrushBuilder, TextBrush,
@@ -103,7 +103,8 @@ impl GpuContext {
         chunks: &HashMap<(i32, i32), Chunk>,
         camera: &Camera,
         fps: &FpsCounter,
-        brush: &mut TextBrush<FontArc>
+        brush: &mut TextBrush<FontArc>,
+        terrain: &Terrain,
     ) {
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
@@ -175,6 +176,8 @@ impl GpuContext {
                 render_pass.set_vertex_buffer(0, chunk.vertex_buffer.slice(..));
                 render_pass
                     .set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                
+                render_pass.set_bind_group(2, &chunk.bind_group, &[]);
                 render_pass.draw_indexed(0..chunk.num_indices, 0, 0..1);
             }
 
