@@ -10,6 +10,7 @@ pub struct Camera {
     pub fovy: f32,
     pub znear: f32,
     pub zfar: f32,
+    pub sensitivity: f32,
 }
 
 pub struct CameraGpu {
@@ -61,23 +62,6 @@ pub struct CameraUniform {
     pub eye_position: [f32; 4],
 }
 
-#[derive(Default)]
-pub struct CameraController {
-    pub speed: f32,
-    pub sensitivity: f32,
-    pub velocity_y: f32,
-    pub is_forward_pressed: bool,
-    pub is_backward_pressed: bool,
-    pub is_left_pressed: bool,
-    pub is_right_pressed: bool,
-    pub is_up_pressed: bool,
-    pub is_down_pressed: bool,
-    pub is_dash_pressed: bool,
-    pub on_ground: bool,
-    pub teleport: bool,
-    pub floating: bool,
-}
-
 impl Camera {
     pub fn new(
         eye: Vec3,
@@ -96,6 +80,21 @@ impl Camera {
             fovy,
             znear,
             zfar,
+            sensitivity: 0.03,
+        }
+    }
+
+    // マウスの移動量からカメラの向き角を更新し、ピッチ角が真上・真下を向かないよう（±89度）制限する
+    pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
+        // マウスの移動量をカメラに反映する
+        self.yaw += (mouse_dx as f32) * self.sensitivity;
+        self.pitch -= (mouse_dy as f32) * self.sensitivity;
+
+        let limit = 89.0f32.to_radians();
+        if self.pitch < -limit {
+            self.pitch = -limit;
+        } else if self.pitch > limit {
+            self.pitch = limit;
         }
     }
 
@@ -127,6 +126,10 @@ impl Camera {
         // まとめる
         proj * view
     }
+
+    pub fn pursue_target(&mut self, target: Vec3) {
+        self.eye = target;
+    }
 }
 
 impl CameraUniform {
@@ -148,140 +151,3 @@ impl CameraUniform {
     }
 }
 
-impl CameraController {
-    pub fn new(speed: f32, sensitivity: f32) -> Self {
-        Self {
-            speed,
-            sensitivity,
-            ..Default::default()
-        }
-    }
-
-    // 入力と重力から、このフレームの移動量を計算して返す。
-    pub fn compute_move(&mut self, camera: &mut Camera, dt: f32) -> Vec3 {
-        if self.teleport {
-            camera.eye.x = 0.0;
-            camera.eye.z = 0.0;
-            camera.eye.y = 300.0;
-            return Vec3::ZERO;
-        }
-
-        // 地面に水平な前方・右方向（XZ平面）
-        let (sin_yaw, cos_yaw) = camera.yaw.sin_cos();
-        let forward_ground = Vec3::new(sin_yaw, 0.0, -cos_yaw).normalize();
-        let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize();
-
-        self.speed = if self.is_dash_pressed {
-            PLAYER_WALK_SPEED * 5.0
-        } else {
-            PLAYER_WALK_SPEED
-        };
-
-        let mut move_dir = Vec3::ZERO;
-        if self.is_forward_pressed {
-            move_dir += forward_ground;
-        }
-        if self.is_backward_pressed {
-            move_dir -= forward_ground;
-        }
-        if self.is_right_pressed {
-            move_dir += right_ground;
-        }
-        if self.is_left_pressed {
-            move_dir -= right_ground;
-        }
-
-        // 水平移動量（斜めも同じ速さになるよう正規化）
-        let horizontal = if move_dir != Vec3::ZERO {
-            move_dir.normalize() * self.speed * dt
-        } else {
-            Vec3::ZERO
-        };
-
-        // --- 縦方向 ---
-        // 浮遊なら接地関係なしに上下させるだけ
-        if self.floating {
-            self.velocity_y = 0.0;
-            if self.is_up_pressed {
-                self.velocity_y = 7.5;
-            }
-            if self.is_down_pressed {
-                self.velocity_y = -7.5;
-            }
-        } else {
-            // 接地中はジャンプ受付、空中は重力
-            if self.on_ground {
-                if self.is_up_pressed {
-                    self.velocity_y = 7.5; // ジャンプ初速
-                }
-            } else {
-                let gravity = 18.0;
-                self.velocity_y -= gravity * dt;
-            }
-        }
-        let vertical = self.velocity_y * dt;
-
-        Vec3::new(horizontal.x, vertical, horizontal.z)
-    }
-
-    pub fn process_keyboard(
-        &mut self,
-        key: winit::keyboard::KeyCode,
-        pressed: bool,
-        repeat: bool,
-    ) -> bool {
-        match key {
-            winit::keyboard::KeyCode::KeyW | winit::keyboard::KeyCode::ArrowUp => {
-                self.is_forward_pressed = pressed;
-                true
-            }
-            winit::keyboard::KeyCode::KeyS | winit::keyboard::KeyCode::ArrowDown => {
-                self.is_backward_pressed = pressed;
-                true
-            }
-            winit::keyboard::KeyCode::KeyA | winit::keyboard::KeyCode::ArrowLeft => {
-                self.is_left_pressed = pressed;
-                true
-            }
-            winit::keyboard::KeyCode::KeyD | winit::keyboard::KeyCode::ArrowRight => {
-                self.is_right_pressed = pressed;
-                true
-            }
-            winit::keyboard::KeyCode::Space => {
-                self.is_up_pressed = pressed;
-                true
-            }
-            winit::keyboard::KeyCode::ShiftLeft | winit::keyboard::KeyCode::ShiftRight => {
-                self.is_dash_pressed = pressed;
-                true
-            }
-            winit::keyboard::KeyCode::ControlLeft | winit::keyboard::KeyCode::ControlRight => {
-                self.is_down_pressed = pressed;
-                true
-            }
-            winit::keyboard::KeyCode::KeyT => {
-                self.teleport = pressed;
-                true
-            }
-            winit::keyboard::KeyCode::KeyF if !repeat && pressed => {
-                self.floating = !self.floating;
-                true
-            }
-            _ => false,
-        }
-    }
-
-    // マウスの移動量からカメラの向き角を更新し、ピッチ角が真上・真下を向かないよう（±89度）制限する
-    pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64, camera: &mut Camera) {
-        // マウスの移動量をカメラに反映する
-        camera.yaw += (mouse_dx as f32) * self.sensitivity;
-        camera.pitch -= (mouse_dy as f32) * self.sensitivity;
-
-        let limit = 89.0f32.to_radians();
-        if camera.pitch < -limit {
-            camera.pitch = -limit;
-        } else if camera.pitch > limit {
-            camera.pitch = limit;
-        }
-    }
-}

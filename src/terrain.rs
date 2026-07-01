@@ -84,7 +84,7 @@ impl Terrain {
         let y1 = (aabb.max_y + 0.5).floor() as i32;
         let z0 = (aabb.min_z + 0.5).floor() as i32;
         let z1 = (aabb.max_z + 0.5).floor() as i32;
-        
+
         for wx in x0..=x1  {
             for wy in y0..=y1 {
                 for wz in z0..=z1 {

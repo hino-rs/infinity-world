@@ -103,7 +103,7 @@ impl ApplicationHandler for Application {
                 if let Some(world) = &mut self.world {
                     if let PhysicalKey::Code(keycode) = key_event.physical_key {
                         world
-                            .camera_controller
+                            .player_controller
                             .process_keyboard(keycode, key_event.state.is_pressed(), key_event.repeat);
                     }
                 }
@@ -141,8 +141,7 @@ impl ApplicationHandler for Application {
                     camera_gpu.update(&gpu.queue, &world.camera);
                     let _delta = self.fps.tick();
                     gpu.render(render, pipelines, camera_gpu, &world.terrain.chunks, &world.camera, &self.fps, brush);
-                    window.request_redraw();
-                }
+                    window.request_redraw();}
             }
             _ => {}
         }
@@ -159,8 +158,8 @@ impl ApplicationHandler for Application {
         if let winit::event::DeviceEvent::MouseMotion { delta } = event {
             if let Some(world) = &mut self.world {
                 world
-                    .camera_controller
-                    .process_mouse(delta.0, delta.1, &mut world.camera);
+                    .camera
+                    .process_mouse(delta.0, delta.1);
             }
         }
     }

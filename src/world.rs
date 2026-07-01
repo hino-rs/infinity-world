@@ -1,15 +1,15 @@
 use glam::Vec3;
 use web_time::Instant;
 
-use crate::camera::{Camera, CameraController};
+use crate::camera::Camera;
 use crate::consts::PLAYER_WALK_SPEED;
-use crate::player::Player;
+use crate::player::{Player, PlayerController};
 use crate::terrain::Terrain;
 
 pub struct World {
     pub player: Player,
+    pub player_controller: PlayerController,
     pub camera: Camera,
-    pub camera_controller: CameraController,
     pub terrain: Terrain,
     pub time: Instant,
     pub speed: f32,
@@ -19,10 +19,11 @@ pub struct World {
 
 impl World {
     pub fn new(device: &wgpu::Device, aspect: f32) -> World {
-        let initial_position = Vec3::new(0.0, 300.0, 0.0);
+        let initial_position = Vec3::new(0.0, 100.0, 0.0);
         
         let player = Player::new(initial_position);
-        
+        let player_controller = PlayerController::default();
+
         let camera = Camera::new(
             Vec3::new(5.0, 100.0, 5.0),
             0.0f32.to_radians(),
@@ -35,12 +36,10 @@ impl World {
 
         let terrain = Terrain::new(device);
 
-        let camera_controller = CameraController::new(PLAYER_WALK_SPEED, 0.003);
-
         Self {
             player,
+            player_controller,
             camera,
-            camera_controller,
             terrain,
             time: Instant::now(),
             speed: 1.0,
@@ -50,12 +49,15 @@ impl World {
 
     pub fn update(&mut self, dt: f32) {
         // このフレームの希望移動量を計算 コントローラーは前フレームのon_groundを参照する
-        let delta = self.camera_controller.compute_move(&mut self.camera, dt);
-
+        let delta = self.player_controller.compute_move(&mut self.player, &mut self.camera, dt);
+        
         // 軸分離で実際に動かす
-        // let on_ground = self.player.move_player(delta);
-
+        let on_ground = self.player.move_player(delta, &self.terrain);
+        
         // 接地状態をコントローラーに書き戻す
-        // self.camera_controller.on_ground = on_ground;
+        self.player_controller.on_ground = on_ground;
+        
+        // カメラをプレイヤーへ
+        self.camera.pursue_target(self.player.position);
     }
 }
