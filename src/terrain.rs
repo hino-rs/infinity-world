@@ -1,4 +1,6 @@
-use glam::Vec2;
+use std::collections::HashMap;
+
+use glam::{Vec2, Vec3};
 use web_time::Instant;
 use rayon::prelude::*;
 use wgpu::util::DeviceExt;
@@ -19,200 +21,165 @@ pub struct Chunk {
 }
 
 pub struct Terrain {
-    pub chunks: Vec<Chunk>,
-    pub genelated: Vec<(i32, i32)>,
+    pub chunks: HashMap<(i32, i32), Chunk>,
 }
 
 impl Terrain {
-    pub fn add_chunk(&mut self, x: i32, z: i32, seed: u32, device: &wgpu::Device) {
-        let blocks = create_terrain::create_chunk(x, z, seed);
-        let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, x, z);
+    pub fn clear_chunks(&mut self, center: XZi) {
+        let mut remove_poses = Vec::new();
+        for chunk_pos in self.chunks.keys() {
+            let (cx, cz) = *chunk_pos;
+            // 最も外のチャンク
+            let ox = center.x.div_euclid(CHUNK_SIZE as i32) + RADIUS;
+            let oz = center.z.div_euclid(CHUNK_SIZE as i32) + RADIUS;
+            
+            if (cx > ox) || (cz > oz) {
+                remove_poses.push((cx, cz));
+            }
+        }
+
+        for remove_pos in remove_poses {
+            self.chunks.remove(&remove_pos);
+        }
+    }
+
+    pub fn add_chunks(&mut self, device: &wgpu::Device, seed: u32, center: XZi) {
+        let mut coords = Vec::new();
         
+        // 現在地が位置するチャンク
+        let cx = center.x.div_euclid(CHUNK_SIZE as i32);
+        let cz = center.z.div_euclid(CHUNK_SIZE as i32);
+        
+        for z in cz-RADIUS..=cz+RADIUS {
+            for x in cx-RADIUS..=cx+RADIUS {
+                if !self.chunks.get(&(x, z)).is_some() {
+                    if coords.len() > 3 {
+                        break;
+                    }
+                    coords.push((x, z));
+                }
+            }
+        }
+
+        if coords.len() == 0 {
+            return;
+        } else {
+            // println!("{}チャンク追加します。", coords.len());
+        }
+
+        // CPU処理だけ並列化
+        let cpu_results: Vec<_> = coords
+            .par_iter()
+            .map(|&(cx, cz)| {
+                let blocks = create_terrain::create_chunk(cx, cz, seed);
+                let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
+                (cx, cz, blocks, verts, inds)
+            })
+            .collect();
+
+        for (cx, cz, blocks, verts, inds) in cpu_results {
+            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Vertex Buffer"),
+                contents: bytemuck::cast_slice(&verts),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Index Buffer"),
+                contents: bytemuck::cast_slice(&inds),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+            self
+                .chunks
+                    .entry((cx, cz))
+                    .or_insert(Chunk {
+                        coord: (cx, cz),
+                        blocks,
+                        vertex_buffer,
+                        index_buffer,
+                        num_indices: inds.len() as u32,
+                    });
+        }
+    }
+
+    // 最初は初期ポジが位置するチャンクだけ作る
+    pub fn new(device: &wgpu::Device, seed: u32, initial_position: Vec3) -> Self {
+        let x = initial_position.x;
+        let z = initial_position.z;
+
+        let cx = x.div_euclid(CHUNK_SIZE as f32) as i32;
+        let cz = z.div_euclid(CHUNK_SIZE as f32) as i32;
+        
+        let blocks = create_terrain::create_chunk(cx, cz, seed);
+        let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
+
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Chunk Vertex Buffer"),
             contents: bytemuck::cast_slice(&verts),
             usage: wgpu::BufferUsages::VERTEX,
         });
-        
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Chunk Index Buffer"),
             contents: bytemuck::cast_slice(&inds),
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        self.chunks.push(Chunk {
-            coord: (x, z),
-            blocks,
-            vertex_buffer,
-            index_buffer,
-            num_indices: inds.len() as u32,
-        });
-        self.genelated.push((x, z));
-    }
-
-    pub fn genelated(&self, target: (i32, i32)) -> bool {
-        for g in &self.genelated {
-            if *g == target {
-                return true;
-            }
+        Self {
+            chunks: 
+                HashMap::from([
+                    ((cx, cz),
+                    Chunk {
+                        coord: (cx, cz),
+                        blocks,
+                        vertex_buffer,
+                        index_buffer,
+                        num_indices: inds.len() as u32,
+                    }
+                )])
         }
-        false
-    }
 
-    pub fn add_chunks(&mut self, device: &wgpu::Device, seed: u32, center: XZi) {
-        let neighbor = [
-            // (-1, -1),
-            // (-1,  0),
-            // (-1,  1),
-
-            // ( 0,  1),
-            // ( 0, -1),
-
-            // ( 1,  1),
-            // ( 1,  0),
-            // ( 1, -1),
-
-
-            (-2, -2),
-            (-2, -1),
-            (-2,  0),
-            (-2,  1),
-            (-2,  2),
-
-            (-1, -2),
-            (-1, -1),
-            (-1,  0),
-            (-1,  1),
-            (-1,  2),
-
-            ( 0, -2),
-            ( 0, -1),
-            // ( 0,  0),
-            ( 0,  1),
-            ( 0,  2),
-
-            ( 1, -2),
-            ( 1, -1),
-            ( 1,  0),
-            ( 1,  1),
-            ( 1,  2),
-
-            ( 2, -2),
-            ( 2, -1),
-            ( 2,  0),
-            ( 2,  1),
-            ( 2,  2),
-        ];
-
-        // let coords1: Vec<(i32, i32)> = (-RADIUS..=RADIUS)
-        //     .flat_map(|cx| (0..=RADIUS).map(move |cz| (cx+center_x, cz+center_z)))
+        // let now = Instant::now();
+        // // 座標リストを作る
+        // let coords: Vec<(i32, i32)> = (-RADIUS..=RADIUS)
+        //     .flat_map(|cx| (-RADIUS..=RADIUS).map(move |cz| (cx, cz)))
         //     .collect();
 
-        let mut coords1 = Vec::new();
-        for n in neighbor {
-            let x = n.0 + center.x;
-            let z = n.1 + center.z;
+        // // CPU処理だけ並列化
+        // let cpu_results: Vec<_> = coords
+        //     .par_iter()
+        //     .map(|&(cx, cz)| {
+        //         let blocks = create_terrain::create_chunk(cx, cz, seed);
+        //         let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
+        //         (cx, cz, blocks, verts, inds)
+        //     })
+        //     .collect();
 
-            let cx = x.div_euclid(CHUNK_SIZE as i32);
-            let cz = z.div_euclid(CHUNK_SIZE as i32);
-            
-            coords1.push((cx, cz));
-        }
+        // let mut chunks = HashMap::with_capacity((RADIUS*RADIUS+1) as usize);
 
-        let mut coords = Vec::new();
-        coords1.iter().for_each(|pos| {
-            if !self.genelated(*pos) {
-                coords.push(*pos);
-            }
-        });
-
-        if coords.len() == 0 {
-            return;
-        } else {
-            println!("チャンクを生成します");
-        }
-
-        // CPU処理だけ並列化
-        let cpu_results: Vec<_> = coords
-            .par_iter()
-            .map(|&(cx, cz)| {
-                println!("{cx}:{cz}");
-                let blocks = create_terrain::create_chunk(cx, cz, seed);
-                let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
-                (cx, cz, blocks, verts, inds)
-            })
-            .collect();
-
-        for (cx, cz, blocks, verts, inds) in cpu_results {
-            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Chunk Vertex Buffer"),
-                contents: bytemuck::cast_slice(&verts),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Chunk Index Buffer"),
-                contents: bytemuck::cast_slice(&inds),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-            self.chunks.push(Chunk {
-                coord: (cx, cz),
-                blocks,
-                vertex_buffer,
-                index_buffer,
-                num_indices: inds.len() as u32,
-            });
-            self.genelated.push((cx, cz));
-        }
-    }
-
-    pub fn new(device: &wgpu::Device, seed: u32) -> Self {
-        let now = Instant::now();
-        // 座標リストを作る
-        let coords: Vec<(i32, i32)> = (-RADIUS..=RADIUS)
-            .flat_map(|cx| (-RADIUS..=RADIUS).map(move |cz| (cx, cz)))
-            .collect();
-
-        // CPU処理だけ並列化
-        let cpu_results: Vec<_> = coords
-            .par_iter()
-            .map(|&(cx, cz)| {
-                let blocks = create_terrain::create_chunk(cx, cz, seed);
-                let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
-                (cx, cz, blocks, verts, inds)
-            })
-            .collect();
-
-        let mut chunks = Vec::with_capacity(cpu_results.len());
-        let mut genelated = Vec::new();
-        for (cx, cz, blocks, verts, inds) in cpu_results {
-            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Chunk Vertex Buffer"),
-                contents: bytemuck::cast_slice(&verts),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Chunk Index Buffer"),
-                contents: bytemuck::cast_slice(&inds),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-            chunks.push(Chunk {
-                coord: (cx, cz),
-                blocks,
-                vertex_buffer,
-                index_buffer,
-                num_indices: inds.len() as u32,
-            });
-            genelated.push((cx, cz));
-        }
-        println!(
-            "地形生成とメッシュ作成にかかった時間: {}ms",
-            now.elapsed().as_millis()
-        );
-
-        Self {
-            chunks,
-            genelated,
-        }
+        // for (cx, cz, blocks, verts, inds) in cpu_results {
+        //     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //         label: Some("Chunk Vertex Buffer"),
+        //         contents: bytemuck::cast_slice(&verts),
+        //         usage: wgpu::BufferUsages::VERTEX,
+        //     });
+        //     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //         label: Some("Chunk Index Buffer"),
+        //         contents: bytemuck::cast_slice(&inds),
+        //         usage: wgpu::BufferUsages::INDEX,
+        //     });
+        //     chunks
+        //         .entry((cx, cz))
+        //         .or_insert(Chunk {
+        //             coord: (cx, cz),
+        //             blocks,
+        //             vertex_buffer,
+        //             index_buffer,
+        //             num_indices: inds.len() as u32,
+        //         });
+        // }
+        // println!(
+        //     "地形生成とメッシュ作成にかかった時間: {}ms",
+        //     now.elapsed().as_millis()
+        // );
     }
 
     // 指定のワールド座標がソリッドか
@@ -255,7 +222,11 @@ impl Terrain {
         let lz = wz.rem_euclid(CHUNK_SIZE as i32);
 
         // 該当チャンクを探す
-        let Some(chunk) = self.chunks.iter().find(|c| c.coord == (cx, cz)) else {
+        // let Some(chunk) = self.chunks.iter().find(|c| c.coord == (cx, cz)) else {
+        //     return Air;
+        // };
+
+        let Some(chunk) = self.chunks.get(&((cx, cz))) else {
             return Air;
         };
 

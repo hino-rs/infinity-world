@@ -2,6 +2,7 @@ use glam::{Vec3, Vec3Swizzles};
 use web_time::Instant;
 
 use crate::camera::Camera;
+use crate::consts::RADIUS;
 use crate::player::{Player, PlayerController};
 use crate::terrain::Terrain;
 
@@ -18,8 +19,9 @@ pub struct World {
 
 impl World {
     pub fn new(device: &wgpu::Device, aspect: f32) -> World {
+        let seed = rand::random::<u32>();
         let initial_position = Vec3::new(0.0, 100.0, 0.0);
-        
+        let terrain = Terrain::new(device, seed, initial_position);
         let player = Player::new(initial_position);
         let player_controller = PlayerController::default();
 
@@ -32,9 +34,6 @@ impl World {
             0.1,
             1000000000.0,
         );
-
-        let seed = rand::random::<u32>();
-        let terrain = Terrain::new(device, seed);
 
         Self {
             player,
@@ -49,8 +48,6 @@ impl World {
     }
 
     pub fn update(&mut self, dt: f32, device: &wgpu::Device) {
-        self.time += 1;
-
         // このフレームの希望移動量を計算 コントローラーは前フレームのon_groundを参照する
         let delta = self.player_controller.compute_move(&mut self.player, &mut self.camera, dt);
         
@@ -60,9 +57,13 @@ impl World {
         // 接地状態をコントローラーに書き戻す
         self.player_controller.on_ground = on_ground;
         
-        // カメラをプレイヤーへ
+        // カメラをプレイヤー位置へ
         self.camera.pursue_target(self.player.position);
 
+        // チャンク生成と掃除
         self.terrain.add_chunks(device, self.seed, self.player.pos_xzi());
+        if self.terrain.chunks.len() > ((RADIUS*2+1)*(RADIUS*2+1)) as usize {
+            self.terrain.clear_chunks(self.player.pos_xzi());
+        }
     }
 }

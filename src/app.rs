@@ -64,9 +64,9 @@ impl ApplicationHandler for Application {
         
         let font = FontArc::try_from_slice(FONT_BYTES).expect("フォント読み込み失敗");
         let gpu = pollster::block_on(GpuContext::new(Arc::clone(&window)));
-        let pipelines = PipelineRegistry::new(&gpu.device, &gpu.config);
         let world = World::new(&gpu.device, gpu.config.width as f32 / gpu.config.height as f32);
-        let camera_gpu = CameraGpu::new(&gpu.device, &pipelines.camera_uniform_bind_group_layout, &world.camera);
+        let pipelines = PipelineRegistry::new(&gpu.device, &gpu.config);
+        let camera_gpu = CameraGpu::new(&gpu.device, &pipelines.camera_uniform_bind_group_layout, &world.camera);        
         let render = RenderInfo::new(&gpu.device, &gpu.config);
         let brush = BrushBuilder::using_font(font).build(
             &gpu.device,

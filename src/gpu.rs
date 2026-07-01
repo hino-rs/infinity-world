@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use winit::window::Window;
 
@@ -100,7 +100,7 @@ impl GpuContext {
         render_info: &RenderInfo,
         pipelines: &PipelineRegistry,
         camera_gpu: &CameraGpu,
-        chunks: &Vec<Chunk>,
+        chunks: &HashMap<(i32, i32), Chunk>,
         camera: &Camera,
         fps: &FpsCounter,
         brush: &mut TextBrush<FontArc>
@@ -171,7 +171,7 @@ impl GpuContext {
             render_pass.set_bind_group(1, &camera_gpu.bind_group, &[]); // スロット1 (カメラ)
 
             // チャンク
-            for chunk in chunks {
+            for chunk in chunks.values() {
                 render_pass.set_vertex_buffer(0, chunk.vertex_buffer.slice(..));
                 render_pass
                     .set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
