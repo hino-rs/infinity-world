@@ -5,16 +5,17 @@ use web_time::Instant;
 use rayon::prelude::*;
 use wgpu::util::DeviceExt;
 
+use crate::chunk::Rle;
 use crate::game::BlockType::Air;
 use crate::utils::XZi;
 use crate::{consts::*, game::BlockType, player::Aabb};
-use crate::create_terrain;
+use crate::{chunk, create_terrain};
 
 pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
 
 pub struct Chunk {
     pub coord: (i32, i32),
-    pub blocks: ChunkBlocks,
+    pub blocks: Vec<Rle>,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_indices: u32,
@@ -71,7 +72,7 @@ impl Terrain {
         let cpu_results: Vec<_> = coords
             .par_iter()
             .map(|&(cx, cz)| {
-                let blocks = create_terrain::create_chunk(cx, cz, seed);
+                let blocks = chunk::create_chunk(cx, cz, seed);
                 let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
                 (cx, cz, blocks, verts, inds)
             })
@@ -88,21 +89,18 @@ impl Terrain {
                 contents: bytemuck::cast_slice(&inds),
                 usage: wgpu::BufferUsages::INDEX,
             });
+
             self
                 .chunks
                     .entry((cx, cz))
                     .or_insert(Chunk {
                         coord: (cx, cz),
-                        blocks,
+                        blocks: chunk::compress(&blocks),
                         vertex_buffer,
                         index_buffer,
                         num_indices: inds.len() as u32,
                     });
         }
-    }
-
-    pub fn count_blocktype(&self, target: BlockType) -> usize {
-        self.chunks[&(0,0)].blocks.iter().filter(|&&block| block == target).count()
     }
 
     // 最初は初期ポジが位置するチャンクだけ作る
@@ -113,7 +111,7 @@ impl Terrain {
         let cx = x.div_euclid(CHUNK_SIZE as f32) as i32;
         let cz = z.div_euclid(CHUNK_SIZE as f32) as i32;
         
-        let blocks = create_terrain::create_chunk(cx, cz, seed);
+        let blocks = chunk::create_chunk(cx, cz, seed);
         let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -133,57 +131,13 @@ impl Terrain {
                     ((cx, cz),
                     Chunk {
                         coord: (cx, cz),
-                        blocks,
+                        blocks: chunk::compress(&blocks),
                         vertex_buffer,
                         index_buffer,
                         num_indices: inds.len() as u32,
                     }
                 )])
         }
-
-        // let now = Instant::now();
-        // // 座標リストを作る
-        // let coords: Vec<(i32, i32)> = (-RADIUS..=RADIUS)
-        //     .flat_map(|cx| (-RADIUS..=RADIUS).map(move |cz| (cx, cz)))
-        //     .collect();
-
-        // // CPU処理だけ並列化
-        // let cpu_results: Vec<_> = coords
-        //     .par_iter()
-        //     .map(|&(cx, cz)| {
-        //         let blocks = create_terrain::create_chunk(cx, cz, seed);
-        //         let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cz);
-        //         (cx, cz, blocks, verts, inds)
-        //     })
-        //     .collect();
-
-        // let mut chunks = HashMap::with_capacity((RADIUS*RADIUS+1) as usize);
-
-        // for (cx, cz, blocks, verts, inds) in cpu_results {
-        //     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //         label: Some("Chunk Vertex Buffer"),
-        //         contents: bytemuck::cast_slice(&verts),
-        //         usage: wgpu::BufferUsages::VERTEX,
-        //     });
-        //     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //         label: Some("Chunk Index Buffer"),
-        //         contents: bytemuck::cast_slice(&inds),
-        //         usage: wgpu::BufferUsages::INDEX,
-        //     });
-        //     chunks
-        //         .entry((cx, cz))
-        //         .or_insert(Chunk {
-        //             coord: (cx, cz),
-        //             blocks,
-        //             vertex_buffer,
-        //             index_buffer,
-        //             num_indices: inds.len() as u32,
-        //         });
-        // }
-        // println!(
-        //     "地形生成とメッシュ作成にかかった時間: {}ms",
-        //     now.elapsed().as_millis()
-        // );
     }
 
     // 指定のワールド座標がソリッドか
@@ -235,6 +189,7 @@ impl Terrain {
         };
 
         let index = (lx as usize) * X_STRIDE + (wy as usize) * CHUNK_SIZE + (lz as usize);
-        chunk.blocks[index]
+        chunk::get_block(&chunk.blocks, index)
     }
 }
+

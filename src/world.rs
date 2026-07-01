@@ -66,6 +66,5 @@ impl World {
         if self.terrain.chunks.len() > ((RADIUS*2+1)*(RADIUS*2+1)) as usize {
             self.terrain.clear_chunks(self.player.pos_xzi());
         }
-
     }
 }

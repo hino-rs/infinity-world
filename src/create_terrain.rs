@@ -79,32 +79,7 @@ pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
     blocks[index] != BlockType::Air
 }
 
-pub fn create_chunk(chunk_x: i32, chunk_z: i32, seed: u32) -> ChunkBlocks {
-    let mut blocks = [BlockType::Air; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
 
-    for x in 0..CHUNK_SIZE {
-        for z in 0..CHUNK_SIZE {
-            let wx = (chunk_x * CHUNK_SIZE as i32 + x as i32) as f64;
-            let wz = (chunk_z * CHUNK_SIZE as i32 + z as i32) as f64;
-
-            let h = surface_height(wx, wz, seed).clamp(1, MAX_HEIGHT as i32 - 1);
-
-            // 底から地表高さまで詰めるだけ（上はデフォルトの Air のまま）
-            for y in 0..=h as usize {
-                let yi = y as i32;
-                let index = x * X_STRIDE + y * CHUNK_SIZE + z;
-                blocks[index] = if yi == h {
-                    if h > 60 { BlockType::Stone } else { BlockType::Grass } // 高所は岩肌
-                } else if yi >= h - DIRT_DEPTH {
-                    BlockType::Dirt
-                } else {
-                    BlockType::Stone
-                };
-            }
-        }
-    }
-    blocks
-}
 
 pub fn build_chunk_mesh(
     blocks: &ChunkBlocks,
