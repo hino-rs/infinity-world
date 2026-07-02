@@ -2,6 +2,7 @@ use crate::consts::*;
 use crate::create_terrain::surface_height;
 use crate::game::BlockType;
 use crate::terrain::ChunkBlocks;
+use crate::noise::domain_warp;
 
 pub struct Rle {
     count: u16,
@@ -68,7 +69,8 @@ pub fn create_chunk(chunk_x: i32, chunk_z: i32, seed: u32) -> ChunkBlocks {
             let wx = (chunk_x * CHUNK_SIZE as i32 + x as i32) as f64;
             let wz = (chunk_z * CHUNK_SIZE as i32 + z as i32) as f64;
 
-            let h = surface_height(wx, wz, seed).clamp(1, MAX_HEIGHT as i32 - 1);
+            // let h = surface_height(wx, wz, seed).clamp(1, MAX_HEIGHT as i32 - 1);
+            let h = domain_warp(wx, wz, seed, 1.0, 160.0).clamp(1, MAX_HEIGHT as i32 - 1);
 
             // 底から地表高さまで詰めるだけ（上はデフォルトの Air のまま）
             for y in 0..=h as usize {

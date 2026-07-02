@@ -1,7 +1,8 @@
-use crate::consts::*;
-use crate::{game::BlockType, terrain::*};
-use crate::noise::*;
+use glam::DVec3;
 
+use crate::consts::*;
+use crate::noise::*;
+use crate::{game::BlockType, terrain::*};
 
 /// 地形の頂点データ
 #[repr(C)]
@@ -69,24 +70,25 @@ pub fn surface_height(wx: f64, wz: f64, seed: u32) -> i32 {
 // 周辺ブロックが不透明ブロックかどうかを調べる
 // チャンク外は空気(非ソリッド)とみなす
 pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
-    if x < 0 || x >= CHUNK_SIZE as i32 ||
-       y < 0 || y >= MAX_HEIGHT as i32 ||
-       z < 0 || z >= CHUNK_SIZE as i32 {
-        return false;    
+    if x < 0
+        || x >= CHUNK_SIZE as i32
+        || y < 0
+        || y >= MAX_HEIGHT as i32
+        || z < 0
+        || z >= CHUNK_SIZE as i32
+    {
+        return false;
     }
 
     let index = (x as usize) * X_STRIDE + (y as usize) * CHUNK_SIZE + (z as usize);
     blocks[index] != BlockType::Air
 }
 
-
-
 pub fn build_chunk_mesh(
     blocks: &ChunkBlocks,
     chunk_x: i32,
     chunk_z: i32,
-) -> (Vec<TerrainVertex>, Vec<u32>) 
-{
+) -> (Vec<TerrainVertex>, Vec<u32>) {
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
@@ -116,10 +118,38 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi, yi + 1, zi, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi + 1, zi, blocks),
+                                is_solid(xi, yi + 1, zi - 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi + 1, zi, blocks),
+                                is_solid(xi, yi + 1, zi - 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi + 1, zi, blocks),
+                                is_solid(xi, yi + 1, zi + 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi + 1, zi, blocks),
+                                is_solid(xi, yi + 1, zi + 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + 0.5, bz - 0.5],
@@ -147,8 +177,12 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0, start_idx + 3, start_idx + 2,
-                        start_idx + 0, start_idx + 2, start_idx + 1,
+                        start_idx + 0,
+                        start_idx + 3,
+                        start_idx + 2,
+                        start_idx + 0,
+                        start_idx + 2,
+                        start_idx + 1,
                     ]);
                 }
 
@@ -156,10 +190,38 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi, yi - 1, zi, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi - 1, zi, blocks),
+                                is_solid(xi, yi - 1, zi - 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi - 1, zi, blocks),
+                                is_solid(xi, yi - 1, zi - 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi - 1, zi, blocks),
+                                is_solid(xi, yi - 1, zi + 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi - 1, zi, blocks),
+                                is_solid(xi, yi - 1, zi + 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
@@ -187,8 +249,12 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0, start_idx + 1, start_idx + 2,
-                        start_idx + 0, start_idx + 2, start_idx + 3,    
+                        start_idx + 0,
+                        start_idx + 1,
+                        start_idx + 2,
+                        start_idx + 0,
+                        start_idx + 2,
+                        start_idx + 3,
                     ]);
                 }
 
@@ -196,10 +262,38 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi, yi, zi - 1, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi, zi - 1, blocks),
+                                is_solid(xi, yi - 1, zi - 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi, zi - 1, blocks),
+                                is_solid(xi, yi - 1, zi - 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi, zi - 1, blocks),
+                                is_solid(xi, yi + 1, zi - 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi, zi - 1, blocks),
+                                is_solid(xi, yi + 1, zi - 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
@@ -227,8 +321,12 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0, start_idx + 3, start_idx + 2,
-                        start_idx + 0, start_idx + 2, start_idx + 1,
+                        start_idx + 0,
+                        start_idx + 3,
+                        start_idx + 2,
+                        start_idx + 0,
+                        start_idx + 2,
+                        start_idx + 1,
                     ]);
                 }
 
@@ -236,10 +334,38 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi, yi, zi + 1, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi, zi + 1, blocks),
+                                is_solid(xi, yi - 1, zi + 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi, zi + 1, blocks),
+                                is_solid(xi, yi - 1, zi + 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi, zi + 1, blocks),
+                                is_solid(xi, yi + 1, zi + 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi, zi + 1, blocks),
+                                is_solid(xi, yi + 1, zi + 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz + 0.5],
@@ -267,8 +393,12 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0, start_idx + 1, start_idx + 2,
-                        start_idx + 0, start_idx + 2, start_idx + 3,
+                        start_idx + 0,
+                        start_idx + 1,
+                        start_idx + 2,
+                        start_idx + 0,
+                        start_idx + 2,
+                        start_idx + 3,
                     ]);
                 }
 
@@ -276,10 +406,38 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi - 1, yi, zi, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi - 1, zi, blocks),
+                                is_solid(xi - 1, yi, zi - 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi + 1, zi, blocks),
+                                is_solid(xi - 1, yi, zi - 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi + 1, zi, blocks),
+                                is_solid(xi - 1, yi, zi + 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi - 1, zi, blocks),
+                                is_solid(xi - 1, yi, zi + 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
@@ -307,8 +465,12 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0, start_idx + 3, start_idx + 2,
-                        start_idx + 0, start_idx + 2, start_idx + 1,
+                        start_idx + 0,
+                        start_idx + 3,
+                        start_idx + 2,
+                        start_idx + 0,
+                        start_idx + 2,
+                        start_idx + 1,
                     ]);
                 }
 
@@ -316,10 +478,38 @@ pub fn build_chunk_mesh(
                 if !is_solid(xi + 1, yi, zi, blocks) {
                     let start_idx = vertices.len() as u32;
 
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi - 1, zi, blocks),
+                                is_solid(xi + 1, yi, zi - 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi - 1, zi, blocks),
+                                is_solid(xi + 1, yi, zi + 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi + 1, zi, blocks),
+                                is_solid(xi + 1, yi, zi + 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi + 1, zi, blocks),
+                                is_solid(xi + 1, yi, zi - 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx + 0.5, by - 0.5, bz - 0.5],
@@ -347,8 +537,12 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0, start_idx + 3, start_idx + 2,
-                        start_idx + 0, start_idx + 2, start_idx + 1,
+                        start_idx + 0,
+                        start_idx + 3,
+                        start_idx + 2,
+                        start_idx + 0,
+                        start_idx + 2,
+                        start_idx + 1,
                     ]);
                 }
             }
