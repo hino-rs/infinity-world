@@ -1,3 +1,5 @@
+use std::f32::consts::TAU;
+
 use crate::consts::*;
 use wgpu::util::DeviceExt;
 use glam::{Mat4, Vec3};
@@ -87,7 +89,7 @@ impl Camera {
     // マウスの移動量からカメラの向き角を更新し、ピッチ角が真上・真下を向かないよう（±89度）制限する
     pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
         // マウスの移動量をカメラに反映する
-        self.yaw += (mouse_dx as f32) * self.sensitivity;
+        self.yaw = (self.yaw + (mouse_dx as f32) * self.sensitivity).rem_euclid(TAU);
         self.pitch -= (mouse_dy as f32) * self.sensitivity;
 
         let limit = 89.0f32.to_radians();
