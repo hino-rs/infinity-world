@@ -165,3 +165,4 @@ fn render_sky(view_dir: vec3f, sun_dir: vec3f) -> vec3f {
 
     return sky_color + sun_color;
 }
+

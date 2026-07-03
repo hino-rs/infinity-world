@@ -28,6 +28,8 @@ pub struct Application {
     pub render: Option<RenderInfo>,
     pub fps: FpsCounter,
     pub brush: Option<TextBrush<FontArc>>,
+    pub now: Instant,
+    pub frames: u128,
 }
 
 impl Application {
@@ -43,6 +45,8 @@ impl Application {
             render: None,
             fps: FpsCounter::new(120),
             brush: None,
+            now: Instant::now(),
+            frames: 0,
         }
     }
 }
@@ -127,6 +131,12 @@ impl ApplicationHandler for Application {
                 }
             }
             WindowEvent::RedrawRequested => {
+                self.frames += 1;
+                if self.now.elapsed().as_secs() > 60 {
+                    println!("総フレーム数: {}", self.frames);
+                    panic!();
+                }
+
                 let now = Instant::now();
                 let dt = now.duration_since(self.last_render_time).as_secs_f32();
                 self.last_render_time = now;

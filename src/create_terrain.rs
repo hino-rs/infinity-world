@@ -1,7 +1,13 @@
+use std::char::MAX;
+
 use glam::DVec3;
+use glam::IVec3;
+use glam::USizeVec3;
+use glam::UVec3;
 
 use crate::consts::*;
 use crate::noise::*;
+use crate::utils::IndexVec;
 use crate::{game::BlockType, terrain::*};
 
 /// 地形の頂点データ
@@ -99,11 +105,32 @@ pub fn build_chunk_mesh(
     for x in 0..CHUNK_SIZE {
         for y in 0..MAX_HEIGHT {
             for z in 0..CHUNK_SIZE {
-                let index = x * X_STRIDE + y * CHUNK_SIZE + z;
+                let center = IndexVec::<CHUNK_SIZE, MAX_HEIGHT>::new(x, y, z);
+                let index = center.to_index();
                 let block = blocks[index];
 
                 if block == BlockType::Air {
                     continue;
+                }
+
+                if !(x == 0
+                    || x == CHUNK_SIZE
+                    || y == 0
+                    || y == MAX_HEIGHT
+                    || z == 0
+                    || z == CHUNK_SIZE)
+                {
+                    if index > X_STRIDE && index < CHUNK_VOLUME - X_STRIDE {
+                        if blocks[center.up()] != BlockType::Air
+                        && blocks[center.down()] != BlockType::Air
+                        && blocks[center.left()] != BlockType::Air
+                        && blocks[center.right()] != BlockType::Air
+                        && blocks[center.front()] != BlockType::Air
+                        && blocks[center.back()] != BlockType::Air
+                        {
+                            continue;
+                        }
+                    }
                 }
 
                 let block_type_id = block as u32;
