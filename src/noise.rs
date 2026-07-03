@@ -128,13 +128,13 @@ pub fn domain_warp(x: f64, z: f64, seed: u32, amplitude: f64, scale: f64) -> i32
     let x = x / scale;
     let z = z / scale;
     
-    let dx = open_simplex_noise(x, y, z, seed) * amplitude;
-    let dy = open_simplex_noise(x, y, z, seed+1) * amplitude;
-    let dz = open_simplex_noise(x, y, z, seed+2) * amplitude;
+    let dx = perlin_noise(x, y, z, seed) * amplitude;
+    let dy = perlin_noise(x, y, z, seed+1) * amplitude;
+    let dz = perlin_noise(x, y, z, seed+2) * amplitude;
 
     let p = DVec3::new(x + dx, y + dy, z + dz);
 
-    (get_fbm(p.x, p.y, p.z, seed+3, 4) * MAX_HEIGHT as f64 + SEA_LEVEL).round() as i32
+    (get_fbm(p.x, p.y, p.z, seed+3, 4) * MAX_HEIGHT as f64 + SEA_LEVEL as f64).round() as i32
 }
 
 // 特定の方向に歪ませる

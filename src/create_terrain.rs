@@ -1,4 +1,5 @@
 use crate::consts::*;
+use crate::game::BlockType::{Air, Water};
 use crate::noise::*;
 use crate::utils::IndexVec;
 use crate::{game::BlockType, terrain::*};
@@ -63,7 +64,7 @@ pub fn _surface_height(wx: f64, wz: f64, seed: u32) -> i32 {
     let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, seed + 2, 2) * 0.5 /*ここからの数値が高いほど山が多くなる*/ + 0.2 - 0.0).max(0.0);
     let mountains = ridge * mask * MAX_MOUNTAIN_HEIGHT;
 
-    (SEA_LEVEL + hills + mountains).round() as i32
+    (SEA_LEVEL as f64 + hills + mountains).round() as i32
 }
 
 // 周辺ブロックが不透明ブロックかどうかを調べる
@@ -113,16 +114,29 @@ pub fn build_chunk_mesh(
                     || z == 0
                     || z == CHUNK_SIZE)
                 {
-                    if index > X_STRIDE
-                        && index < CHUNK_VOLUME - X_STRIDE
-                        && blocks[center.up()] != BlockType::Air
-                        && blocks[center.down()] != BlockType::Air
-                        && blocks[center.left()] != BlockType::Air
-                        && blocks[center.right()] != BlockType::Air
-                        && blocks[center.front()] != BlockType::Air
-                        && blocks[center.back()] != BlockType::Air
-                    {
-                        continue;
+                    if index > X_STRIDE && index < CHUNK_VOLUME - X_STRIDE {
+                        let up = blocks[center.up()];
+                        let down = blocks[center.down()];
+                        let left = blocks[center.left()];
+                        let right = blocks[center.right()];
+                        let front = blocks[center.front()];
+                        let back = blocks[center.back()];
+
+                        if up != Air
+                            && up != Water
+                            && down != Air
+                            && down != Water
+                            && left != Air
+                            && left != Water
+                            && right != Air
+                            && right != Water
+                            && front != Air
+                            && front != Water
+                            && back != Air
+                            && back != Water
+                        {
+                            continue;
+                        }
                     }
                 }
 

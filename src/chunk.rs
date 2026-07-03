@@ -73,15 +73,21 @@ pub fn create_chunk(chunk_x: i32, chunk_z: i32, seed: u32) -> ChunkBlocks {
 
             // 底から地表高さまで詰めるだけ（上はデフォルトの Air のまま）
             for y in 0..=h as usize {
-                let yi = y as i32;
+                // let yi = y as i32;
                 let index = x * X_STRIDE + y * CHUNK_SIZE + z;
-                blocks[index] = if yi == h {
-                    if h > 60 { BlockType::Stone } else { BlockType::Grass } // 高所は岩肌
-                } else if yi >= h - DIRT_DEPTH {
-                    BlockType::Dirt
+                // blocks[index] = if yi == h {
+                //     if h > 60 { BlockType::Stone } else { BlockType::Grass } // 高所は岩肌
+                // } else if yi >= h - DIRT_DEPTH {
+                //     BlockType::Dirt
+                // } else {
+                //     BlockType::Stone
+                // };
+
+                if y < SEA_LEVEL as usize {
+                    blocks[index] = BlockType::Water;
                 } else {
-                    BlockType::Stone
-                };
+                    blocks[index] = BlockType::Gravel;
+                }
             }
         }
     }
