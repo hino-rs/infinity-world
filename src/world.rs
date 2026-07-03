@@ -71,7 +71,5 @@ impl World {
         if self.terrain.chunks.len() > ((RADIUS*2+3)*(RADIUS*2+3)) as usize {
             self.terrain.clear_chunks(self.player.pos_xzi());
         }
-
-        println!("{:.1}, {:.1}, ", self.camera.pitch, self.camera.yaw);
     }
 }

@@ -167,11 +167,10 @@ impl ApplicationHandler for Application {
                         render,
                         pipelines,
                         camera_gpu,
-                        &world.terrain.chunks,
+                        &world.terrain,
                         &world.camera,
                         &self.fps,
                         brush,
-                        &world.terrain,
                     );
                     window.request_redraw();
                 }

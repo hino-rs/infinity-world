@@ -100,11 +100,10 @@ impl GpuContext {
         render_info: &RenderInfo,
         pipelines: &PipelineRegistry,
         camera_gpu: &CameraGpu,
-        chunks: &HashMap<(i32, i32), Chunk>,
+        terrain: &Terrain,
         camera: &Camera,
         fps: &FpsCounter,
         brush: &mut TextBrush<FontArc>,
-        terrain: &Terrain,
     ) {
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
@@ -172,7 +171,9 @@ impl GpuContext {
             render_pass.set_bind_group(1, &camera_gpu.bind_group, &[]); // スロット1 (カメラ)
 
             // チャンク
-            for chunk in chunks.values() {
+            let chunk_positions_in_view = terrain.chunks_in_view(camera);
+            for pos_in_view in chunk_positions_in_view {
+                let chunk = terrain.chunks.get(&pos_in_view).unwrap();
                 render_pass.set_vertex_buffer(0, chunk.vertex_buffer.slice(..));
                 render_pass
                     .set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint32);

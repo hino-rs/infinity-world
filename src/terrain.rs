@@ -5,6 +5,7 @@ use rayon::prelude::*;
 use web_time::Instant;
 use wgpu::util::DeviceExt;
 
+use crate::camera::Camera;
 use crate::chunk::Rle;
 use crate::game::BlockType::Air;
 use crate::utils::XZi;
@@ -24,8 +25,11 @@ pub struct Chunk {
     pub bind_group: wgpu::BindGroup,
 }
 
+type ChunkPos = (i32, i32);
+type Chunks = HashMap<ChunkPos, Chunk>;
+
 pub struct Terrain {
-    pub chunks: HashMap<(i32, i32), Chunk>,
+    pub chunks: Chunks,
 }
 
 impl Terrain {
@@ -199,6 +203,26 @@ impl Terrain {
 
         let index = (lx as usize) * X_STRIDE + (wy as usize) * CHUNK_SIZE + (lz as usize);
         chunk::get_block(&chunk.blocks, index)
+    }
+
+    pub fn chunks_in_view(&self, camera: &Camera) -> Vec<ChunkPos> {
+        let mut positions: Vec<ChunkPos> = Vec::with_capacity(((RADIUS*2+1)*RADIUS) as usize);
+        let pcx = camera.eye.x.div_euclid(CHUNK_SIZE as f32) as i32;
+        let pcz = camera.eye.z.div_euclid(CHUNK_SIZE as f32) as i32;
+
+        for chunk_pos in self.chunks.keys() {
+            let (cx, cz) = *chunk_pos;
+            if pcx == cx && pcz == cz {
+                positions.push((pcx, pcz))
+            } else {
+                let (wx, wz) = (cx * CHUNK_SIZE as i32, cz * CHUNK_SIZE as i32);
+                if camera.is_point_in_frustum(Vec3::new(wx as f32, 0.0, wz as f32)) {
+                    positions.push((cx, cz))
+                }
+            }
+        }
+        
+        positions
     }
 }
 
