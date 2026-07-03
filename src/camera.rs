@@ -1,6 +1,5 @@
 use std::f32::consts::TAU;
 
-use crate::consts::*;
 use wgpu::util::DeviceExt;
 use glam::{Mat4, Vec3, Vec4};
 
@@ -24,14 +23,14 @@ pub struct CameraGpu {
 impl CameraGpu {
     pub fn new(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, camera: &Camera) -> Self {
         let mut uniform = CameraUniform::new();
-        uniform.update_view_proj(&camera);
+        uniform.update_view_proj(camera);
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
             contents: bytemuck::cast_slice(&[uniform]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &layout,
+            layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: buffer.as_entire_binding(),
@@ -143,8 +142,8 @@ impl Camera {
             -self.yaw.cos() * self.pitch.cos(),
         ).normalize();
 
-        // 若干カメラを引く
-        let pulled_eye = self.eye - front * 20.0;
+        // 端のチャンクの中心が範囲内になるようカメラを引く
+        let pulled_eye = self.eye - front * 100.0;
         
         // ビュー行列を作成
         let view = Mat4::look_to_rh(pulled_eye, front, Vec3::Y);

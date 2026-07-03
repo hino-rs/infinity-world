@@ -215,7 +215,7 @@ impl PipelineRegistry {
             &self.general_uniform_buffer,
             0,
             bytemuck::bytes_of(&GeneralUniform {
-                time: time,
+                time,
                 _p1: [0.0, 0.0, 0.0],
             }),
         );

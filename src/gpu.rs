@@ -1,11 +1,11 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use winit::window::Window;
 
-use crate::{camera::{Camera, CameraGpu}, fps::FpsCounter, pipeline::PipelineRegistry, render_info::RenderInfo, terrain::{Chunk, Terrain}};
+use crate::{camera::{Camera, CameraGpu}, fps::FpsCounter, pipeline::PipelineRegistry, render_info::RenderInfo, terrain::Terrain};
 
 use wgpu_text::{
-    BrushBuilder, TextBrush,
+    TextBrush,
     glyph_brush::{Section as TextSection, Text, ab_glyph::FontArc},
 };
 

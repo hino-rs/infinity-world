@@ -1,10 +1,3 @@
-use std::char::MAX;
-
-use glam::DVec3;
-use glam::IVec3;
-use glam::USizeVec3;
-use glam::UVec3;
-
 use crate::consts::*;
 use crate::noise::*;
 use crate::utils::IndexVec;
@@ -60,7 +53,7 @@ pub fn calc_ao(side1: bool, side2: bool, corner: bool) -> u8 {
 }
 
 // 1列分の地表の高さを2Dで決める
-pub fn surface_height(wx: f64, wz: f64, seed: u32) -> i32 {
+pub fn _surface_height(wx: f64, wz: f64, seed: u32) -> i32 {
     // 平地の起伏
     let hills = get_fbm(wx / 80.0, 0.0, wz / 80.0, seed, 4) * 6.0;
 
@@ -120,16 +113,16 @@ pub fn build_chunk_mesh(
                     || z == 0
                     || z == CHUNK_SIZE)
                 {
-                    if index > X_STRIDE && index < CHUNK_VOLUME - X_STRIDE {
-                        if blocks[center.up()] != BlockType::Air
+                    if index > X_STRIDE
+                        && index < CHUNK_VOLUME - X_STRIDE
+                        && blocks[center.up()] != BlockType::Air
                         && blocks[center.down()] != BlockType::Air
                         && blocks[center.left()] != BlockType::Air
                         && blocks[center.right()] != BlockType::Air
                         && blocks[center.front()] != BlockType::Air
                         && blocks[center.back()] != BlockType::Air
-                        {
-                            continue;
-                        }
+                    {
+                        continue;
                     }
                 }
 
@@ -204,10 +197,10 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 3,
                         start_idx + 2,
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 2,
                         start_idx + 1,
                     ]);
@@ -276,10 +269,10 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 1,
                         start_idx + 2,
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 2,
                         start_idx + 3,
                     ]);
@@ -348,10 +341,10 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 3,
                         start_idx + 2,
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 2,
                         start_idx + 1,
                     ]);
@@ -420,10 +413,10 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 1,
                         start_idx + 2,
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 2,
                         start_idx + 3,
                     ]);
@@ -492,10 +485,10 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 3,
                         start_idx + 2,
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 2,
                         start_idx + 1,
                     ]);
@@ -564,10 +557,10 @@ pub fn build_chunk_mesh(
                     });
 
                     indices.extend_from_slice(&[
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 3,
                         start_idx + 2,
-                        start_idx + 0,
+                        start_idx,
                         start_idx + 2,
                         start_idx + 1,
                     ]);

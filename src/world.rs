@@ -1,9 +1,7 @@
-use glam::{Vec3, Vec3Swizzles};
-use web_time::Instant;
+use glam::Vec3;
 
 use crate::camera::Camera;
-use crate::consts::RADIUS;
-use crate::game::BlockType::Air;
+use crate::consts::{FOV, RADIUS, Z_FAR, Z_NEAR};
 use crate::player::{Player, PlayerController};
 use crate::terrain::Terrain;
 
@@ -12,9 +10,6 @@ pub struct World {
     pub player_controller: PlayerController,
     pub camera: Camera,
     pub terrain: Terrain,
-    pub time: u128,
-    pub angle: f32,
-    pub speed: f32,
     pub seed: u32,
 }
 
@@ -35,9 +30,9 @@ impl World {
             0.0f32.to_radians(),
             -20.0f32.to_radians(),
             aspect,
-            90.0f32.to_radians(),
-            0.1,
-            1000000000.0,
+            FOV.to_radians(),
+            Z_NEAR,
+            Z_FAR,
         );
 
         Self {
@@ -45,16 +40,13 @@ impl World {
             player_controller,
             camera,
             terrain,
-            time: 0,
-            angle: 0.0,
-            speed: 1.0,
             seed,
         }
     }
 
     pub fn update(&mut self, dt: f32, device: &wgpu::Device, storage_layout: &wgpu::BindGroupLayout) {
         // このフレームの希望移動量を計算 コントローラーは前フレームのon_groundを参照する
-        let delta = self.player_controller.compute_move(&mut self.player, &mut self.camera, dt);
+        let delta = self.player_controller.compute_move(&mut self.player, &self.camera, dt);
         
         // 軸分離で実際に動かす
         let on_ground = self.player.move_player(delta, &self.terrain);

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use web_time::Instant;
 use std::collections::VecDeque;
 

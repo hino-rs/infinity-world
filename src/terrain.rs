@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use glam::{Vec2, Vec3};
+use glam::Vec3;
 use rayon::prelude::*;
-use web_time::Instant;
 use wgpu::util::DeviceExt;
 
 use crate::camera::Camera;
@@ -15,7 +14,6 @@ use crate::{consts::*, game::BlockType, player::Aabb};
 pub type ChunkBlocks = [BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE];
 
 pub struct Chunk {
-    pub coord: (i32, i32),
     pub blocks: Vec<Rle>,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -60,7 +58,7 @@ impl Terrain {
 
         for z in cz - RADIUS..=cz + RADIUS {
             for x in cx - RADIUS..=cx + RADIUS {
-                if !self.chunks.get(&(x, z)).is_some() {
+                if !self.chunks.contains_key(&(x, z)) {
                     if coords.len() > 3 {
                         break;
                     }
@@ -69,7 +67,7 @@ impl Terrain {
             }
         }
 
-        if coords.len() == 0 {
+        if coords.is_empty() {
             return;
         } else {
             // println!("{}チャンク追加します。", coords.len());
@@ -97,10 +95,9 @@ impl Terrain {
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-            let (storage_buffer, bind_group) = create_chunk_storage(&device, layout, &blocks);
+            let (storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
 
             self.chunks.entry((cx, cz)).or_insert(Chunk {
-                coord: (cx, cz),
                 blocks: chunk::compress(&blocks),
                 vertex_buffer,
                 index_buffer,
@@ -133,13 +130,12 @@ impl Terrain {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let (storage_buffer, bind_group) = create_chunk_storage(&device, layout, &blocks);
+        let (storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
 
         Self {
             chunks: HashMap::from([(
                 (cx, cz),
                 Chunk {
-                    coord: (cx, cz),
                     blocks: chunk::compress(&blocks),
                     vertex_buffer,
                     index_buffer,
@@ -197,7 +193,7 @@ impl Terrain {
         //     return Air;
         // };
 
-        let Some(chunk) = self.chunks.get(&((cx, cz))) else {
+        let Some(chunk) = self.chunks.get(&(cx, cz)) else {
             return Air;
         };
 
@@ -215,7 +211,9 @@ impl Terrain {
             if pcx == cx && pcz == cz {
                 positions.push((pcx, pcz))
             } else {
-                let (wx, wz) = (cx * CHUNK_SIZE as i32, cz * CHUNK_SIZE as i32);
+                let size = CHUNK_SIZE as i32;
+                let (wx, wz) = (cx * size, cz * size);
+                
                 if camera.is_point_in_frustum(Vec3::new(wx as f32, 0.0, wz as f32)) {
                     positions.push((cx, cz))
                 }

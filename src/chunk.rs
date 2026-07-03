@@ -1,5 +1,4 @@
 use crate::consts::*;
-use crate::create_terrain::surface_height;
 use crate::game::BlockType;
 use crate::terrain::ChunkBlocks;
 use crate::noise::domain_warp;
@@ -9,15 +8,15 @@ pub struct Rle {
     value: BlockType,
 }
 
-pub fn decompress(compressed: &Vec<Rle>) -> Vec<BlockType> {
-    let mut blocks = Vec::with_capacity(8192);
-    for data in compressed {
-        let count = data.count;
-        let value = data.value;
-        blocks.extend(vec![value; count as usize]);
-    }
-    blocks
-}
+// pub fn decompress(compressed: &Vec<Rle>) -> Vec<BlockType> {
+//     let mut blocks = Vec::with_capacity(8192);
+//     for data in compressed {
+//         let count = data.count;
+//         let value = data.value;
+//         blocks.extend(vec![value; count as usize]);
+//     }
+//     blocks
+// }
 
 pub fn compress(blocks: &[BlockType; CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE]) -> Vec<Rle> {
     let mut prev_block = blocks[0];

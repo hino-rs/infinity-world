@@ -43,7 +43,7 @@ impl <const SIZE: usize, const HEIGHT: usize>IndexVec<SIZE, HEIGHT> {
 
     #[inline]
     #[must_use]
-    pub const fn to_index(&self) -> usize {
+    pub const fn to_index(self) -> usize {
         self.x * Self::X_STRIDE + self.y * Self::Y_STRIDE + self.z
     }
 
