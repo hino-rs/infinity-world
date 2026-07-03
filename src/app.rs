@@ -17,6 +17,11 @@ use crate::world::World;
 
 static FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-VariableFont_wght.ttf");
 
+#[derive(Default)]
+pub struct AppOption {
+    pub fullscreen: bool,
+}
+
 pub struct Application {
     pub window: Option<Arc<Window>>,
     pub gpu: Option<GpuContext>,
@@ -30,10 +35,11 @@ pub struct Application {
     pub brush: Option<TextBrush<FontArc>>,
     pub now: Instant,
     pub frames: u128,
+    option: AppOption,
 }
 
 impl Application {
-    pub fn new(_instance: wgpu::Instance) -> Self {
+    pub fn new(option: AppOption) -> Self {
         Self {
             window: None,
             gpu: None,
@@ -47,6 +53,7 @@ impl Application {
             brush: None,
             now: Instant::now(),
             frames: 0,
+            option,
         }
     }
 }
@@ -59,7 +66,12 @@ impl ApplicationHandler for Application {
 
         let window = Arc::new(
             event_loop
-                .create_window(Window::default_attributes())
+                .create_window(
+                    if self.option.fullscreen {
+                        Window::default_attributes().with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
+                    } else {
+                        Window::default_attributes()
+                    })
                 .unwrap(),
         );
 

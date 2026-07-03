@@ -16,15 +16,23 @@ mod chunk;
 
 use winit::event_loop::{ControlFlow, EventLoop};
 
-use crate::{app::Application};
+use crate::app::{AppOption, Application};
 
 fn main() {
     env_logger::init();
-
+    let mut option = AppOption::default();
     let event_loop = EventLoop::new().unwrap();
-    event_loop.set_control_flow(ControlFlow::Poll);
-    let instance = wgpu::Instance::default();
-    let mut app = Application::new(instance);
+
+    let args = std::env::args();
+    args.for_each(|a| {
+        match a.as_str() {
+            "full" => option.fullscreen = true,
+            "poll" => event_loop.set_control_flow(ControlFlow::Poll),
+            _ => {}
+        }
+    });
+
+    let mut app = Application::new(option);
 
     event_loop.run_app(&mut app).unwrap();
 }

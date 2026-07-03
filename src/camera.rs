@@ -81,7 +81,7 @@ impl Camera {
             fovy,
             znear,
             zfar,
-            sensitivity: 0.03,
+            sensitivity: 0.01,
         }
     }
 
