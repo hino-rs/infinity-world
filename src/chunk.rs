@@ -66,8 +66,14 @@ pub fn get_block(compressed: &[Rle], index: usize) -> BlockType {
 }
 
 pub fn create_chunk(chunk_x: i32, chunk_y: i32, chunk_z: i32, seed: u32) -> (Option<ChunkBlocks>, bool) {
+    let now = std::time::Instant::now();
+
     let mut blocks = [BlockType::Air; NUM_CHUNK_BLOCKS];
     let mut air_count = 0;
+
+    if (chunk_y * CHUNK_SIZE as i32) > MAX_HEIGHT || chunk_y < 0 {
+        return (None, true);
+    }; 
 
     for x in 0..CHUNK_SIZE {
         for z in 0..CHUNK_SIZE {
@@ -103,6 +109,7 @@ pub fn create_chunk(chunk_x: i32, chunk_y: i32, chunk_z: i32, seed: u32) -> (Opt
         }
     }
 
+    println!("{}", now.elapsed().as_secs_f64());
     if air_count == NUM_CHUNK_BLOCKS {
         return (None, true);
     }

@@ -89,7 +89,7 @@ impl Terrain {
         //     return;
         // }
 
-        'o: for y in (cy - RADIUS..=cy + RADIUS).rev() {
+        'o: for y in (cy - Y_RADIUS..=cy + Y_RADIUS).rev() {
             if y < 0 {
                 continue;
             }
@@ -97,7 +97,7 @@ impl Terrain {
                 for x in cx - RADIUS..=cx + RADIUS {
                     if !self.chunks.contains_key(&(x, y, z)) {
                         coords.push((x, y, z));
-                        if coords.len() > 3 {
+                        if coords.len() > 1 {
                             break;
                             // break 'o;
                         }

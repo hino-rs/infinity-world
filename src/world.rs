@@ -1,7 +1,7 @@
 use glam::Vec3;
 
 use crate::camera::Camera;
-use crate::consts::{FOV, RADIUS, Z_FAR, Z_NEAR};
+use crate::consts::{FOV, RADIUS, Y_RADIUS, Z_FAR, Z_NEAR};
 use crate::player::{Player, PlayerController};
 use crate::terrain::Terrain;
 
@@ -61,7 +61,7 @@ impl World {
         // チャンク生成と掃除
         self.terrain.add_chunks(device, self.seed, player_pos, storage_layout);
         // チャンク境界動いたときにで生成・掃除の高速繰り返しが起きないように若干余裕を持たせる
-        if self.terrain.chunks.len() > ((RADIUS*2+3)*(RADIUS*2+3)*(RADIUS*2+3)) as usize {
+        if self.terrain.chunks.len() > ((RADIUS*2+3)*(Y_RADIUS*2+3)*(RADIUS*2+3)) as usize {
             self.terrain.clear_chunks(player_pos);
         }
         
