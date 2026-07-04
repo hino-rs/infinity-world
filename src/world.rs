@@ -65,7 +65,7 @@ impl World {
             self.terrain.clear_chunks(player_pos);
         }
 
-        println!("{}", self.terrain.chunks.len());
+        // println!("{}", self.terrain.chunks.len());
 
         // println!("{:?}", self.terrain.block_at_world(player_pos.x, player_pos.y, player_pos.z));
     }

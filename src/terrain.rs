@@ -75,15 +75,22 @@ impl Terrain {
         let cy = center.y.div_euclid(CHUNK_SIZE as i32);
         let cz = center.z.div_euclid(CHUNK_SIZE as i32);
 
+        if cy < 0 {
+            return;
+        }
+
         // if self.chunks.contains_key(&(cx, cy, cz)) {
         //     return;
         // }
 
         for y in cy - RADIUS..=cy + RADIUS {
+            if y < 0 {
+                continue;
+            }
             for z in cz - RADIUS..=cz + RADIUS {
                 for x in cx - RADIUS..=cx + RADIUS {
                     if !self.chunks.contains_key(&(x, y, z)) {
-                        if coords.len() > 16 {
+                        if coords.len() > 20 {
                             break;
                         }
                         coords.push((x, y, z));
@@ -94,10 +101,8 @@ impl Terrain {
 
         if coords.is_empty() {
             return;
-        } else {
-            // println!("{}チャンク追加します。", coords.len());
         }
-
+        
         // CPU処理だけ並列化
         let cpu_results: Vec<_> = coords
             .par_iter()
