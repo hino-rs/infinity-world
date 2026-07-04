@@ -96,16 +96,6 @@ impl Player {
         }
     }
 
-    #[inline]
-    pub fn pos_xzi(&self) -> XZi {
-        XZi::new(self.position.x as i32, self.position.z as i32)
-    }
-
-    #[inline]
-    pub fn pos_xzf(&self) -> XZf {
-        XZf::new(self.position.x, self.position.z)
-    }
-
     pub fn aabb(&self) -> Aabb {
         let min_x = self.position.x - PLAYER_HALF_WIDTH;
         let max_x = self.position.x + PLAYER_HALF_WIDTH;

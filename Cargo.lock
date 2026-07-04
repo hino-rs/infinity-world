@@ -852,6 +852,7 @@ dependencies = [
  "glam",
  "log",
  "noise",
+ "num-traits",
  "pollster",
  "rand 0.10.1",
  "rayon",

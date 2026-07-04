@@ -62,7 +62,7 @@ pub fn _surface_height(wx: f64, wz: f64, seed: u32) -> i32 {
     let n = get_fbm(wx / 220.0, 0.0, wz / 220.0, seed + 1, 5);
     let ridge = (1.0 - n.abs()).powi(3);
     let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, seed + 2, 2) * 0.5 /*ここからの数値が高いほど山が多くなる*/ + 0.2 - 0.0).max(0.0);
-    let mountains = ridge * mask * MAX_MOUNTAIN_HEIGHT;
+    let mountains = ridge * mask * 100000.0;
 
     (SEA_LEVEL as f64 + hills + mountains).round() as i32
 }
@@ -73,20 +73,21 @@ pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
     if x < 0
         || x >= CHUNK_SIZE as i32
         || y < 0
-        || y >= MAX_HEIGHT as i32
+        || y >= CHUNK_SIZE as i32
         || z < 0
         || z >= CHUNK_SIZE as i32
     {
         return false;
     }
 
-    let index = (x as usize) * X_STRIDE + (y as usize) * CHUNK_SIZE + (z as usize);
+    let index = Chunk::index(x, y, z);
     blocks[index] != BlockType::Air
 }
 
 pub fn build_chunk_mesh(
     blocks: &ChunkBlocks,
     chunk_x: i32,
+    chunk_y: i32,
     chunk_z: i32,
 ) -> (Vec<TerrainVertex>, Vec<u32>) {
     let mut vertices = Vec::new();
@@ -94,12 +95,13 @@ pub fn build_chunk_mesh(
 
     // チャンクの左下隅のワールド座標
     let offset_x = (chunk_x * CHUNK_SIZE as i32) as f32;
+    let offset_y = (chunk_y * CHUNK_SIZE as i32) as f32;
     let offset_z = (chunk_z * CHUNK_SIZE as i32) as f32;
 
     for x in 0..CHUNK_SIZE {
-        for y in 0..MAX_HEIGHT {
+        for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
-                let center = IndexVec::<CHUNK_SIZE, MAX_HEIGHT>::new(x, y, z);
+                let center = IndexVec::<CHUNK_SIZE, CHUNK_SIZE>::new(x, y, z);
                 let index = center.to_index();
                 let block = blocks[index];
 
@@ -110,11 +112,11 @@ pub fn build_chunk_mesh(
                 if !(x == 0
                     || x == CHUNK_SIZE
                     || y == 0
-                    || y == MAX_HEIGHT
+                    || y == CHUNK_SIZE
                     || z == 0
                     || z == CHUNK_SIZE)
                 {
-                    if index > X_STRIDE && index < CHUNK_VOLUME - X_STRIDE {
+                    if index > CHUNK_SIZE && index < NUM_CHUNK_BLOCKS - Y_STRIDE {
                         let up = blocks[center.up()];
                         let down = blocks[center.down()];
                         let left = blocks[center.left()];
@@ -142,7 +144,7 @@ pub fn build_chunk_mesh(
 
                 let block_type_id = block as u32;
                 let bx = x as f32 + offset_x;
-                let by = y as f32;
+                let by = y as f32 + offset_y;
                 let bz = z as f32 + offset_z;
                 let xi = x as i32;
                 let yi = y as i32;

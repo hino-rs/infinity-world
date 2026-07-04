@@ -172,22 +172,28 @@ impl GpuContext {
 
             // チャンク
             let chunk_positions_in_view = terrain.chunks_in_view(camera);
+            let mut next = false;
             for pos_in_view in chunk_positions_in_view {
                 let chunk = terrain.chunks.get(&pos_in_view).unwrap();
-                render_pass.set_vertex_buffer(0, chunk.vertex_buffer.slice(..));
-                render_pass
-                    .set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                
-                render_pass.set_bind_group(2, &chunk.bind_group, &[]);
-                render_pass.draw_indexed(0..chunk.num_indices, 0, 0..1);
+                if chunk.blocks.is_some() && chunk.num_indices > 0 {
+                    render_pass.set_vertex_buffer(0, chunk.vertex_buffer.slice(..));
+                    render_pass
+                        .set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    
+                    render_pass.set_bind_group(2, &chunk.bind_group, &[]);
+                    render_pass.draw_indexed(0..chunk.num_indices, 0, 0..1);
+                    next = true;
+                }
             }
 
-            // パイプラインを空描画用に切り替える
-            render_pass.set_pipeline(&pipelines.sky_render_pipeline);
-            // カメラ情報
-            render_pass.set_bind_group(1, &camera_gpu.bind_group, &[]);
-            // 頂点バッファを使わずに、3つの頂点（インデックス0, 1, 2）で描画を実行
-            render_pass.draw(0..3, 0..1);
+            if next {
+                // パイプラインを空描画用に切り替える
+                render_pass.set_pipeline(&pipelines.sky_render_pipeline);
+                // カメラ情報
+                render_pass.set_bind_group(1, &camera_gpu.bind_group, &[]);
+                // 頂点バッファを使わずに、3つの頂点（インデックス0, 1, 2）で描画を実行
+                render_pass.draw(0..3, 0..1);
+            }
         }
 
         

@@ -26,8 +26,8 @@ pub struct IndexVec<const SIZE: usize, const HEIGHT: usize> {
 }
 
 impl <const SIZE: usize, const HEIGHT: usize>IndexVec<SIZE, HEIGHT> {
-    const X_STRIDE: usize = SIZE * HEIGHT;
-    const Y_STRIDE: usize = SIZE;
+    const X_STRIDE: usize = SIZE;
+    const Y_STRIDE: usize = SIZE * HEIGHT;
     
     #[inline]
     #[must_use]
