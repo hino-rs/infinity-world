@@ -136,10 +136,18 @@ impl PipelineRegistry {
             cache: None,
         });
 
+        let sky_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { 
+            label: Some("Sky Pipeline Layout"), 
+            bind_group_layouts: &[
+                Some(&general_uniform_bind_group_layout),
+                Some(&camera_uniform_bind_group_layout),
+            ], 
+            immediate_size: 0,
+        });
 
         let sky_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Sky Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
+            layout: Some(&sky_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_sky"),
