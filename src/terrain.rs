@@ -22,16 +22,16 @@ pub struct Chunk {
     pub num_indices: u32,
 
     pub storage_buffer: Option<wgpu::Buffer>,
-    pub bind_group: wgpu::BindGroup,
+    pub bind_group: Option<wgpu::BindGroup>,
 }
 
 impl Chunk {
     #[inline(always)]
     #[must_use]
     pub fn index<T>(x: T, y: T, z: T) -> usize
-    where 
+    where
         T: Num + Copy + AsPrimitive<usize>,
-     {       
+    {
         y.as_() * (CHUNK_SIZE * CHUNK_SIZE) + x.as_() * CHUNK_SIZE + z.as_()
     }
 }
@@ -67,7 +67,13 @@ impl Terrain {
         }
     }
 
-    pub fn add_chunks(&mut self, device: &wgpu::Device, seed: u32, center: IVec3, layout: &wgpu::BindGroupLayout) {
+    pub fn add_chunks(
+        &mut self,
+        device: &wgpu::Device,
+        seed: u32,
+        center: IVec3,
+        layout: &wgpu::BindGroupLayout,
+    ) {
         let mut coords = Vec::new();
 
         // 現在地が位置するチャンク
@@ -75,25 +81,26 @@ impl Terrain {
         let cy = center.y.div_euclid(CHUNK_SIZE as i32);
         let cz = center.z.div_euclid(CHUNK_SIZE as i32);
 
-        if cy < 0 {
-            return;
-        }
+        // if cy < 0 {
+        //     return;
+        // }
 
         // if self.chunks.contains_key(&(cx, cy, cz)) {
         //     return;
         // }
 
-        for y in cy - RADIUS..=cy + RADIUS {
+        'o: for y in (cy - RADIUS..=cy + RADIUS).rev() {
             if y < 0 {
                 continue;
             }
             for z in cz - RADIUS..=cz + RADIUS {
                 for x in cx - RADIUS..=cx + RADIUS {
                     if !self.chunks.contains_key(&(x, y, z)) {
-                        if coords.len() > 20 {
-                            break;
-                        }
                         coords.push((x, y, z));
+                        if coords.len() > 3 {
+                            break;
+                            // break 'o;
+                        }
                     }
                 }
             }
@@ -102,14 +109,14 @@ impl Terrain {
         if coords.is_empty() {
             return;
         }
-        
+
         // CPU処理だけ並列化
         let cpu_results: Vec<_> = coords
             .par_iter()
-            .map(|&(cx, cy, cz)| {
-                let blocks = chunk::create_chunk(cx, cy, cz, seed);
+            .filter_map(|&(cx, cy, cz)| {
+                let (blocks, all_air) = chunk::create_chunk(cx, cy, cz, seed);
                 let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
-                (cx, cy, cz, blocks, verts, inds)
+                Some((cx, cy, cz, blocks, verts, inds))
             })
             .collect();
 
@@ -125,7 +132,7 @@ impl Terrain {
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-            let (storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
+            let (_storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
 
             self.chunks.entry((cx, cy, cz)).or_insert(Chunk {
                 blocks: chunk::compress(&blocks),
@@ -138,8 +145,13 @@ impl Terrain {
         }
     }
 
-    // 最初は初期ポジが位置するチャンクだけ作る
-    pub fn new(device: &wgpu::Device, seed: u32, initial_position: Vec3, layout: &wgpu::BindGroupLayout) -> Self {
+    // 最初は初期ポジのXZに位置するチャンクだけ作る
+    pub fn new(
+        device: &wgpu::Device,
+        seed: u32,
+        initial_position: Vec3,
+        layout: &wgpu::BindGroupLayout,
+    ) -> Self {
         let x = initial_position.x;
         let y = initial_position.y;
         let z = initial_position.z;
@@ -148,24 +160,31 @@ impl Terrain {
         let cy = y.div_euclid(CHUNK_SIZE as f32) as i32;
         let cz = z.div_euclid(CHUNK_SIZE as f32) as i32;
 
-        let blocks = chunk::create_chunk(cx, cy, cz, seed);
-        let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
+        let mut chunks = HashMap::new();
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Chunk Vertex Buffer"),
-            contents: bytemuck::cast_slice(&verts),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Chunk Index Buffer"),
-            contents: bytemuck::cast_slice(&inds),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        for cy in cy - RADIUS..=cy + RADIUS {
+            if cy < 0 {
+                continue;
+            }
+            let (blocks, all_air) = chunk::create_chunk(cx, cy, cz, seed);
+            if all_air { continue; }
 
-        let (storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
+            let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
 
-        Self {
-            chunks: HashMap::from([(
+            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Vertex Buffer"),
+                contents: bytemuck::cast_slice(&verts),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Chunk Index Buffer"),
+                contents: bytemuck::cast_slice(&inds),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+            let (_storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
+
+            chunks.insert(
                 (cx, cy, cz),
                 Chunk {
                     blocks: chunk::compress(&blocks),
@@ -175,8 +194,11 @@ impl Terrain {
                     storage_buffer: None,
                     bind_group,
                 },
-            )]),
+            );
+        
         }
+
+        Self { chunks }
     }
 
     // 指定のワールド座標がソリッドか
@@ -214,7 +236,9 @@ impl Terrain {
         // if wy < 0 || wy >= CHUNK_SIZE as i32 {
         //     return Air;
         // }
-        if wy < 0 { return Air; }
+        if wy < 0 {
+            return Air;
+        }
 
         // ワールド座標をチャンク座標+チャンク内ローカル座標に分解
         let cx = wx.div_euclid(CHUNK_SIZE as i32);
@@ -237,15 +261,17 @@ impl Terrain {
             return Air;
         };
 
-        let index = (lx as usize) * CHUNK_SIZE + (ly as usize) * (CHUNK_SIZE*CHUNK_SIZE) + (lz as usize);
+        let index =
+            (lx as usize) * CHUNK_SIZE + (ly as usize) * (CHUNK_SIZE * CHUNK_SIZE) + (lz as usize);
         // let index = Chunk::index(lx, ly, lz);
         chunk::get_block(&blocks, index)
     }
 
     pub fn chunks_in_view(&self, camera: &Camera) -> Vec<ChunkPos> {
-        let mut positions: Vec<ChunkPos> = Vec::with_capacity(((RADIUS*2+1)*RADIUS) as usize);
+        let mut positions: Vec<ChunkPos> = Vec::with_capacity(((RADIUS * 2 + 1) * RADIUS) as usize);
         let pcx = camera.eye.x.div_euclid(CHUNK_SIZE as f32) as i32;
         let pcz = camera.eye.z.div_euclid(CHUNK_SIZE as f32) as i32;
+        let vp = camera.get_view_proj_matrix();
 
         for chunk_pos in self.chunks.keys() {
             let (cx, cy, cz) = *chunk_pos;
@@ -254,13 +280,13 @@ impl Terrain {
             } else {
                 let size = CHUNK_SIZE as i32;
                 let (wx, wy, wz) = (cx * size, cy * size, cz * size);
-                
-                if camera.is_point_in_frustum(Vec3::new(wx as f32, wy as f32, wz as f32)) {
+
+                if Camera::is_point_in_frustum(Vec3::new(wx as f32, wy as f32, wz as f32), &vp) {
                     positions.push((cx, cy, cz))
                 }
             }
         }
-        
+
         positions
     }
 }
@@ -268,8 +294,12 @@ impl Terrain {
 fn create_chunk_storage(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
-    blocks: &ChunkBlocks,
-) -> (wgpu::Buffer, wgpu::BindGroup) {
+    blocks: &Option<ChunkBlocks>,
+) -> (Option<wgpu::Buffer>, Option<wgpu::BindGroup>) {
+    let Some(blocks) = *blocks else {
+        return (None, None);
+    };
+
     let raw_blocks: Vec<u32> = blocks.iter().map(|&b| b as u32).collect();
 
     use wgpu::util::DeviceExt;
@@ -288,5 +318,5 @@ fn create_chunk_storage(
         }],
     });
 
-    (storage_buffer, bind_group)
+    (Some(storage_buffer), Some(bind_group))
 }

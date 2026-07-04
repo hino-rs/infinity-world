@@ -19,7 +19,10 @@ pub struct Rle {
 //     blocks
 // }
 
-pub fn compress(blocks: &ChunkBlocks) -> Option<Vec<Rle>> {
+pub fn compress(blocks: &Option<ChunkBlocks>) -> Option<Vec<Rle>> {
+    let Some(blocks) = blocks else {
+        return None;
+    };
     let mut prev_block = blocks[0];
     let mut count = 0;
     let mut compressed = Vec::new();
@@ -36,7 +39,9 @@ pub fn compress(blocks: &ChunkBlocks) -> Option<Vec<Rle>> {
         }
     }
     if count == blocks.len() as u16 {
-        return None;
+        if prev_block == BlockType::Air {
+            return None;
+        }
     }
     if count > 0 {
         compressed.push(Rle {
@@ -60,22 +65,18 @@ pub fn get_block(compressed: &[Rle], index: usize) -> BlockType {
     BlockType::Air
 }
 
-pub fn create_chunk(chunk_x: i32, chunk_y: i32, chunk_z: i32, seed: u32) -> ChunkBlocks {
+pub fn create_chunk(chunk_x: i32, chunk_y: i32, chunk_z: i32, seed: u32) -> (Option<ChunkBlocks>, bool) {
     let mut blocks = [BlockType::Air; NUM_CHUNK_BLOCKS];
+    let mut air_count = 0;
 
     for x in 0..CHUNK_SIZE {
         for z in 0..CHUNK_SIZE {
             let wx = (chunk_x * CHUNK_SIZE as i32 + x as i32) as f64;
             let wz = (chunk_z * CHUNK_SIZE as i32 + z as i32) as f64;
 
-            // let h = surface_height(wx, wz, seed).clamp(1, MAX_HEIGHT as i32 - 1);
-            // let h = domain_warp(wx, wy, wz, seed, 1.0, 320.0).clamp(1, (CHUNK_SIZE*CHUNK_SIZE) as i32 - 1);
             let r = domain_warp(wx, 0.0, wz, seed, 1.0, 320.0);
-            let h = (r * 32.0 * 1.0 + 32.0).round() as i32;
+            let h = (r * 32.0 * 3.0 + CHUNK_SIZE as f64).round() as i32;
 
-            // let index = x * X_STRIDE + y * CHUNK_SIZE + z;
-            // let index = Chunk::index(x, y, z);
-            
             for y in 0..CHUNK_SIZE {
                 let wy = chunk_y * CHUNK_SIZE as i32 + y as i32;
                 let index = Chunk::index(x, y, z);
@@ -93,23 +94,17 @@ pub fn create_chunk(chunk_x: i32, chunk_y: i32, chunk_z: i32, seed: u32) -> Chun
                 } else {
                     blocks[index] = BlockType::Air;
                 }
+
+                if blocks[index] == BlockType::Air {
+                    air_count += 1;
+                }
             }
-
-            // let index = Chunk::index(x, y, z);
-            // blocks[index] = BlockType::Ash;
-
-            // 底から地表高さまで詰めるだけ（上はデフォルトの Air のまま）
-            // for y in 0..=h as usize {
-                // let yi = y as i32;
-                // let index = x * X_STRIDE + y * CHUNK_SIZE + z;
-                // let index = Chunk::index(x, y, z);
-                // blocks[index] = if h > 60.0 { BlockType::Stone } else { BlockType::Grass }; // 高所は岩肌
-
-                // if y < SEA_LEVEL as usize {
-                //     blocks[index] = BlockType::Water;
-                // }
+            
         }
-        
     }
-    blocks
+
+    if air_count == NUM_CHUNK_BLOCKS {
+        return (None, true);
+    }
+    (Some(blocks), false)
 }

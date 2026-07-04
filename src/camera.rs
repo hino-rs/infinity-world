@@ -133,40 +133,22 @@ impl Camera {
         self.eye = target;
     }
 
-    /// 指定したワールド座標がカメラの視界内にあるかを判定する
-    pub fn is_point_in_frustum(&self, point_world: Vec3) -> bool {
-        // カメラの正面方向のベクトルを求める
-        let front = Vec3::new(
-            self.yaw.sin() * self.pitch.cos(),
-            self.pitch.sin(),
-            -self.yaw.cos() * self.pitch.cos(),
-        ).normalize();
-
-        // 端のチャンクの中心が範囲内になるようカメラを引く
+    /// ビュー・プロジェクション行列を作る
+    pub fn get_view_proj_matrix(&self) -> Mat4 {
+        let front = self.calc_forward();
         let pulled_eye = self.eye - front * 100.0;
-        
-        // ビュー行列を作成
         let view = Mat4::look_to_rh(pulled_eye, front, Vec3::Y);
+        let proj = Mat4::perspective_rh_gl(self.fovy, self.aspect, 0.0, self.zfar);
+        proj * view
+    }
 
-        // 射影行列の作成
-        let proj = Mat4::perspective_rh_gl(self.fovy, self.aspect, 0.0/*self.znear */, self.zfar);
-
-        // 行列の合成
-        let vp = proj * view;
-
-        // クリップ空間への変換
-        let point_clip: Vec4 = vp * point_world.extend(1.0);
-
-        // 各成分をバラす
-        let x = point_clip.x;
-        let y = point_clip.y;
-        let z = point_clip.z;
+    /// 指定したワールド座標がカメラの視界内にあるかを判定する
+    pub fn is_point_in_frustum(point_world: Vec3, vp: &Mat4) -> bool {
+        let point_clip = *vp * point_world.extend(1.0);
         let w = point_clip.w;
-
-        // 不等式によるフラスタム判定
-        -w <= x && x <= w &&
-        -w <= y && y <= w &&
-        -w <= z && z <= w
+        -w <= point_clip.x && point_clip.x <= w &&
+        -w <= point_clip.y && point_clip.y <= w &&
+        -w <= point_clip.z && point_clip.z <= w
     }
 }
 

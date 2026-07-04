@@ -15,6 +15,15 @@ pub struct TerrainVertex {
 }
 
 impl TerrainVertex {
+    pub fn none() -> Self {
+        Self {
+            position: [0.0, 0.0, 0.0],
+            tex_coords: [0.0, 0.0],
+            block_type: 0,
+            ao_factor: 0.0,
+        }
+    }
+
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
         wgpu::VertexBufferLayout {
@@ -85,11 +94,15 @@ pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
 }
 
 pub fn build_chunk_mesh(
-    blocks: &ChunkBlocks,
+    blocks: &Option<ChunkBlocks>,
     chunk_x: i32,
     chunk_y: i32,
     chunk_z: i32,
 ) -> (Vec<TerrainVertex>, Vec<u32>) {
+    let Some(blocks) = blocks else {
+        return (vec![TerrainVertex::none()], vec![0]);
+    };
+
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
