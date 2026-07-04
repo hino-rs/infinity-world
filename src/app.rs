@@ -126,7 +126,7 @@ impl ApplicationHandler for Application {
                 if key_event.physical_key == PhysicalKey::Code(KeyCode::Escape) {
                     event_loop.exit();
                 }
-
+                
                 if let Some(world) = &mut self.world {
                     if let PhysicalKey::Code(keycode) = key_event.physical_key {
                         world.player_controller.process_keyboard(
@@ -136,6 +136,7 @@ impl ApplicationHandler for Application {
                         );
                     }
                 }
+                
             }
             WindowEvent::Resized(physical_size) => {
                 if let (Some(gpu), Some(render_info)) = (&mut self.gpu, &mut self.render) {

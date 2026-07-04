@@ -21,7 +21,7 @@ pub struct Chunk {
     pub index_buffer: wgpu::Buffer,
     pub num_indices: u32,
 
-    pub storage_buffer: wgpu::Buffer,
+    pub storage_buffer: Option<wgpu::Buffer>,
     pub bind_group: wgpu::BindGroup,
 }
 
@@ -45,15 +45,20 @@ pub struct Terrain {
 
 impl Terrain {
     pub fn clear_chunks(&mut self, center: IVec3) {
-        let mut remove_poses = Vec::new();
-        for chunk_pos in self.chunks.keys() {
-            let (cx, cy, cz) = *chunk_pos;
-            // 最も外のチャンク
-            let ox = center.x.div_euclid(CHUNK_SIZE as i32) + RADIUS;
-            let oz = center.z.div_euclid(CHUNK_SIZE as i32) + RADIUS;
+        let cx_player = center.x.div_euclid(CHUNK_SIZE as i32);
+        let cy_player = center.y.div_euclid(CHUNK_SIZE as i32);
+        let cz_player = center.z.div_euclid(CHUNK_SIZE as i32);
 
-            if (cx.abs() > ox) || (cz.abs() > oz) {
-                remove_poses.push((cx, cy, cz));
+        let threshold = RADIUS + 1;
+
+        let mut remove_poses = Vec::new();
+        for &chunk_pos in self.chunks.keys() {
+            let (cx, cy, cz) = chunk_pos;
+            if (cx - cx_player).abs() > threshold
+                || (cy - cy_player).abs() > threshold
+                || (cz - cz_player).abs() > threshold
+            {
+                remove_poses.push(chunk_pos);
             }
         }
 
@@ -70,15 +75,15 @@ impl Terrain {
         let cy = center.y.div_euclid(CHUNK_SIZE as i32);
         let cz = center.z.div_euclid(CHUNK_SIZE as i32);
 
-        if self.chunks.contains_key(&(cx, cy, cz)) {
-            return;
-        }
+        // if self.chunks.contains_key(&(cx, cy, cz)) {
+        //     return;
+        // }
 
         for y in cy - RADIUS..=cy + RADIUS {
             for z in cz - RADIUS..=cz + RADIUS {
                 for x in cx - RADIUS..=cx + RADIUS {
                     if !self.chunks.contains_key(&(x, y, z)) {
-                        if coords.len() > 5 {
+                        if coords.len() > 16 {
                             break;
                         }
                         coords.push((x, y, z));
@@ -122,7 +127,7 @@ impl Terrain {
                 vertex_buffer,
                 index_buffer,
                 num_indices: inds.len() as u32,
-                storage_buffer,
+                storage_buffer: None,
                 bind_group,
             });
         }
@@ -162,7 +167,7 @@ impl Terrain {
                     vertex_buffer,
                     index_buffer,
                     num_indices: inds.len() as u32,
-                    storage_buffer,
+                    storage_buffer: None,
                     bind_group,
                 },
             )]),
