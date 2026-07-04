@@ -173,6 +173,7 @@ impl GpuContext {
             // チャンク
             let chunk_positions_in_view = terrain.chunks_in_view(camera);
             let mut next = false;
+            println!("{}", chunk_positions_in_view.len());
             for pos_in_view in chunk_positions_in_view {
                 let chunk = terrain.chunks.get(&pos_in_view).unwrap();
                 if chunk.blocks.is_some() && chunk.num_indices > 0 {

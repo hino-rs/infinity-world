@@ -50,10 +50,9 @@ impl Terrain {
             let (cx, cy, cz) = *chunk_pos;
             // 最も外のチャンク
             let ox = center.x.div_euclid(CHUNK_SIZE as i32) + RADIUS;
-            let oy = center.y.div_euclid(CHUNK_SIZE as i32) + RADIUS;
             let oz = center.z.div_euclid(CHUNK_SIZE as i32) + RADIUS;
 
-            if (cx > ox) || (cz > oz) {
+            if (cx.abs() > ox) || (cz.abs() > oz) {
                 remove_poses.push((cx, cy, cz));
             }
         }
@@ -71,11 +70,15 @@ impl Terrain {
         let cy = center.y.div_euclid(CHUNK_SIZE as i32);
         let cz = center.z.div_euclid(CHUNK_SIZE as i32);
 
+        if self.chunks.contains_key(&(cx, cy, cz)) {
+            return;
+        }
+
         for y in cy - RADIUS..=cy + RADIUS {
             for z in cz - RADIUS..=cz + RADIUS {
                 for x in cx - RADIUS..=cx + RADIUS {
                     if !self.chunks.contains_key(&(x, y, z)) {
-                        if coords.len() > 100 {
+                        if coords.len() > 5 {
                             break;
                         }
                         coords.push((x, y, z));
