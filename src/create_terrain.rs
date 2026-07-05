@@ -15,6 +15,7 @@ pub struct TerrainVertex {
     pub tex_coords: [f32; 2],
     pub block_type: u32,
     pub ao_factor: f32,
+    pub normal: [f32; 3],
 }
 
 impl TerrainVertex {
@@ -24,6 +25,7 @@ impl TerrainVertex {
             tex_coords: [0.0, 0.0],
             block_type: 0,
             ao_factor: 0.0,
+            normal: [0.0, 0.0, 0.0],
         }
     }
 
@@ -52,6 +54,11 @@ impl TerrainVertex {
                     offset: 24,
                     shader_location: 3,
                     format: wgpu::VertexFormat::Float32,
+                },
+                wgpu::VertexAttribute {
+                    offset: 28,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
             ],
         }
@@ -162,24 +169,28 @@ pub fn build_chunk_mesh(
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by + 0.5, bz - 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by + 0.5, bz + height as f32 - 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + 0.5, bz + height as f32 - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 1.0, 0.0],
                     });
 
                     indices.extend_from_slice(&[
@@ -248,24 +259,28 @@ pub fn build_chunk_mesh(
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, -1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by - 0.5, bz - 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, -1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by - 0.5, bz + height as f32 - 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, -1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz + height as f32 - 0.5],
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, -1.0, 0.0],
                     });
 
                     indices.extend_from_slice(&[
@@ -334,24 +349,28 @@ pub fn build_chunk_mesh(
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 0.0, -1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by - 0.5, bz - 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 0.0, -1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by + height as f32 - 0.5, bz - 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 0.0, -1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + height as f32 - 0.5, bz - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 0.0, -1.0],
                     });
 
                     indices.extend_from_slice(&[
@@ -420,24 +439,28 @@ pub fn build_chunk_mesh(
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 0.0, 1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by - 0.5, bz + 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 0.0, 1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by + height as f32 - 0.5, bz + 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 0.0, 1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + height as f32 - 0.5, bz + 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [0.0, 0.0, 1.0],
                     });
 
                     indices.extend_from_slice(&[
@@ -506,24 +529,28 @@ pub fn build_chunk_mesh(
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [-1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + height as f32 - 0.5, bz - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [-1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + height as f32 - 0.5, bz + width as f32 - 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [-1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz + width as f32 - 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [-1.0, 0.0, 0.0],
                     });
 
                     indices.extend_from_slice(&[
@@ -592,24 +619,28 @@ pub fn build_chunk_mesh(
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + 0.5, by - 0.5, bz + width as f32 - 0.5],
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + 0.5, by + height as f32 - 0.5, bz + width as f32 - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + 0.5, by + height as f32 - 0.5, bz - 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
                         ao_factor: 1.0,
+                        normal: [1.0, 0.0, 0.0],
                     });
 
                     indices.extend_from_slice(&[

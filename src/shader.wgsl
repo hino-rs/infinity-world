@@ -22,6 +22,7 @@ struct VsOut {
     @builtin(position) clip_pos: vec4f,
     @location(0) color: vec4f,
     @location(1) tex_coords: vec2f,
+    @location(2) normal: vec3f,
 };
 
 struct VsOutSky {
@@ -35,6 +36,7 @@ fn vs_main(
     @location(1) tex_coords: vec2f,
     @location(2) block_type: u32,
     @location(3) ao_factor: f32,
+    @location(4) normal: vec3f, 
 ) -> VsOut {
     var out: VsOut;
     let world_pos = pos;
@@ -96,6 +98,7 @@ fn vs_main(
         default:    { base_color = vec4f(1.0, 0.0, 1.0, 1.0); }       // 例外
     }
 
+    out.normal = normal;
     out.color = vec4f(base_color.rgb * ao_factor, base_color.a);
     return out;
 }
@@ -103,6 +106,17 @@ fn vs_main(
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4f {
     var color = in.color;
+
+    let x = g_u.time * 0.1;
+    let sun_dir = normalize(vec3(cos(x), sin(x), 0.0));
+
+    // ランバート
+    let normal = normalize(in.normal);
+    let diff = max(dot(normal, sun_dir), 0.0);
+    
+    let light_factor = diff * 0.8 + 0.2;
+
+    color = vec4f(color.rgb * light_factor, color.a);
 
     // let thickness = 0.01; 
     // let lineColor = vec3(0.0, 0.0, 0.0); // 線の色（黒）
@@ -130,7 +144,8 @@ fn vs_sky(@builtin(vertex_index) vertex_index: u32) -> VsOutSky {
     let trget = camera.inv_view_proj * vec4f(x, y, 0.0, 1.0);
 
     // 3D座標に戻し、カメラ位置を引いてカメラからの視線方向ベクトルを求める
-    out.view_dir = (trget.xyz / trget.w) - camera.eye_position.xyz;
+    // out.view_dir = (trget.xyz / trget.w) - camera.eye_position.xyz;
+    out.view_dir = trget.xyz;
 
     return out;
 }
