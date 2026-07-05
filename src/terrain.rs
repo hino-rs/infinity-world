@@ -177,7 +177,7 @@ impl Terrain {
             // 範囲外なら探索をスキップ
             if (px - cx).abs() > RADIUS
                 || (py - cy).abs() > Y_RADIUS
-                || (px - cz).abs() > RADIUS
+                || (pz - cz).abs() > RADIUS
                 || py < 0
             {
                 continue;
@@ -214,26 +214,26 @@ impl Terrain {
                 }
             }
 
-            let camera_pos = camera.eye;
-            // --- Rayonでの非同期生成の送信 ---
-            for &(cx, cy, cz) in &coords {
-                self.chunk_in_progress.insert((cx, cy, cz));
-                let tx = self.chunk_tx.clone();
-
-                rayon::spawn(move || {
-                    let (blocks, _all_same) = chunk::create_chunk(cx, cy, cz, seed);
-                    let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
-                    let compressed = chunk::compress(&blocks);
-
-                    let _ = tx.send(ChunkResult {
-                        pos: (cx, cy, cz),
-                        blocks,
-                        compressed,
-                        verts,
-                        inds,
-                    });
+        }
+        let camera_pos = camera.eye;
+        // --- Rayonでの非同期生成の送信 ---
+        for &(cx, cy, cz) in &coords {
+            self.chunk_in_progress.insert((cx, cy, cz));
+            let tx = self.chunk_tx.clone();
+    
+            rayon::spawn(move || {
+                let (blocks, _all_same) = chunk::create_chunk(cx, cy, cz, seed);
+                let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
+                let compressed = chunk::compress(&blocks);
+    
+                let _ = tx.send(ChunkResult {
+                    pos: (cx, cy, cz),
+                    blocks,
+                    compressed,
+                    verts,
+                    inds,
                 });
-            }
+            });
         }
     }
 

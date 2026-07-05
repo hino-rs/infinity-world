@@ -144,7 +144,6 @@ fn vs_sky(@builtin(vertex_index) vertex_index: u32) -> VsOutSky {
     let trget = camera.inv_view_proj * vec4f(x, y, 0.0, 1.0);
 
     // 3D座標に戻し、カメラ位置を引いてカメラからの視線方向ベクトルを求める
-    // out.view_dir = (trget.xyz / trget.w) - camera.eye_position.xyz;
     out.view_dir = trget.xyz;
 
     return out;
