@@ -129,7 +129,7 @@ impl Camera {
         proj * view
     }
 
-    /// 指定したAABBがカメラの視錐台内にあるかを判定する
+    /// 指定したAABBがカメラの視錐台内にあるかを判定する。引数はカメラの引き具合
     pub fn is_aabb_in_frustum(min: Vec3, max: Vec3, vp: &Mat4) -> bool {
         let row0 = vp.row(0);
         let row1 = vp.row(1);

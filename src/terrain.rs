@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::mpsc;
 
 use glam::{IVec3, Vec3, Vec4};
 use num_traits::{AsPrimitive, Num};
-use rayon::prelude::*;
 use wgpu::util::DeviceExt;
 
 use crate::camera::Camera;
@@ -39,8 +39,22 @@ impl Chunk {
 type ChunkPos = (i32, i32, i32);
 type Chunks = HashMap<ChunkPos, Chunk>;
 
+pub struct ChunkResult {
+    pub pos: ChunkPos,
+    pub blocks: Option<ChunkBlocks>,
+    pub compressed: Option<Vec<Rle>>,
+    pub verts: Vec<crate::create_terrain::TerrainVertex>,
+    pub inds: Vec<u32>,
+}
+
 pub struct Terrain {
     pub chunks: Chunks,
+    // メインスレッド側で計算済みチャンクデータを受信するため
+    pub chunk_rx: mpsc::Receiver<ChunkResult>,
+    // Rayonタスクから計算済みチャンクデータを送信するため
+    pub chunk_tx: mpsc::Sender<ChunkResult>,
+    // 現在生成中のチャンクを追跡するため
+    pub chunk_in_progress: HashSet<ChunkPos>,
 }
 
 impl Terrain {
@@ -75,74 +89,25 @@ impl Terrain {
         layout: &wgpu::BindGroupLayout,
         camera: &Camera,
     ) {
-        let vp = camera.build_view_projection_matrix(1.0);
-       
-        let mut coords = Vec::new();
+        // --- 計算結果の受信とGPUバッファの作成 ---
+        let cx_player = center.x.div_euclid(CHUNK_SIZE as i32);
+        let cy_player = center.y.div_euclid(CHUNK_SIZE as i32);
+        let cz_player = center.z.div_euclid(CHUNK_SIZE as i32);
 
-        // 現在地が位置するチャンク
-        let cx = center.x.div_euclid(CHUNK_SIZE as i32);
-        let cy = center.y.div_euclid(CHUNK_SIZE as i32);
-        let cz = center.z.div_euclid(CHUNK_SIZE as i32);
+        let threshold = RADIUS + 1;
 
-        // if cy < 0 {
-        //     return;
-        // }
+        while let Ok(result) = self.chunk_rx.try_recv() {
+            let ChunkResult { pos, blocks, compressed, verts, inds } = result;
+            self.chunk_in_progress.remove(&pos);
 
-        // if self.chunks.contains_key(&(cx, cy, cz)) {
-        //     return;
-        // }
-
-        'o: for y in (cy - Y_RADIUS..=cy + Y_RADIUS).rev() {
-            if y < 0 {
+            let (cx, cy, cz) = pos;
+            if (cx - cx_player).abs() > threshold
+                || (cy - cy_player).abs() > threshold
+                || (cz - cz_player).abs() > threshold
+            {
                 continue;
             }
-            for z in cz - RADIUS..=cz + RADIUS {
-                for x in cx - RADIUS..=cx + RADIUS {
-                    let min_pos = Vec3::new(
-                        (x * CHUNK_SIZE as i32) as f32,
-                        (y * CHUNK_SIZE as i32) as f32,
-                        (z * CHUNK_SIZE as i32) as f32,
-                    );
-                    let max_pos = min_pos + Vec3::splat(CHUNK_SIZE as f32);
 
-                    if Camera::is_aabb_in_frustum(min_pos, max_pos, &vp) {
-                        if !self.chunks.contains_key(&(x, y, z)) {
-                            coords.push((x, y, z));
-                            if coords.len() > 2 {
-                                break;
-                            }
-                        }
-                    }
-
-                    // if Camera::is_point_in_frustum(Vec3::new((x*CHUNK_SIZE as i32) as f32, (y*CHUNK_SIZE as i32) as f32, (z*CHUNK_SIZE as i32) as f32), &vp) {
-                    //     println!("{:?}", self.chunks.get(&(x, y, z)));
-                    //     if !self.chunks.contains_key(&(x, y, z)) {
-                    //         coords.push((x, y, z));
-                    //         if coords.len() > 3 {
-                    //             // break 'o;
-                    //             break;
-                    //         }
-                    //     }
-                    // }
-                }
-            }
-        }
-
-        if coords.is_empty() {
-            return;
-        }
-
-        // CPU処理だけ並列化
-        let cpu_results: Vec<_> = coords
-            .par_iter()
-            .filter_map(|&(cx, cy, cz)| {
-                let (blocks, all_same) = chunk::create_chunk(cx, cy, cz, seed);
-                let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
-                Some((cx, cy, cz, blocks, all_same, verts, inds))
-            })
-            .collect();
-
-        for (cx, cy, cz, blocks, all_same, verts, inds) in cpu_results {
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Chunk Vertex Buffer"),
                 contents: bytemuck::cast_slice(&verts),
@@ -157,7 +122,7 @@ impl Terrain {
             let (_storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
 
             self.chunks.entry((cx, cy, cz)).or_insert(Chunk {
-                blocks: chunk::compress(&blocks),
+                blocks: compressed,
                 vertex_buffer,
                 index_buffer,
                 num_indices: inds.len() as u32,
@@ -165,6 +130,121 @@ impl Terrain {
                 bind_group,
             });
         }
+
+        // --- 新規生成が必要なチャンク座標の探索 ---
+        let max_pending = 32;
+        if self.chunk_in_progress.len() >= max_pending {
+            return;
+        }
+
+        let max_to_spawn = max_pending - self.chunk_in_progress.len();
+
+        let vp = camera.build_view_projection_matrix(1.0);
+        let mut coords = Vec::new();
+
+        let cx = center.x.div_euclid(CHUNK_SIZE as i32);
+        let cy = center.y.div_euclid(CHUNK_SIZE as i32);
+        let cz = center.z.div_euclid(CHUNK_SIZE as i32);
+
+        'o: for y in (cy - Y_RADIUS..=cy + Y_RADIUS).rev() {
+            if y < 0 {
+                continue;
+            }
+            for z in cz - RADIUS..=cz + RADIUS {
+                for x in cx - RADIUS..=cx + RADIUS {
+                    let min_pos = Vec3::new(
+                        (x * CHUNK_SIZE as i32) as f32,
+                        (y * CHUNK_SIZE as i32) as f32,
+                        (z * CHUNK_SIZE as i32) as f32,
+                    );
+                    let max_pos = min_pos + Vec3::splat(CHUNK_SIZE as f32);
+                    if Camera::is_aabb_in_frustum(min_pos, max_pos, &vp) {
+                        if !self.chunks.contains_key(&(x, y, z)) && !self.chunk_in_progress.contains(&(x, y, z)) {
+                            coords.push((x, y, z));
+                            if coords.len() >= max_to_spawn {
+                                break 'o;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Rayonでの非同期生成の送信 ---
+        for &(cx, cy, cz) in &coords {
+            self.chunk_in_progress.insert((cx, cy, cz));
+            let tx = self.chunk_tx.clone();
+
+            rayon::spawn(move || {
+                let (blocks, _all_same) = chunk::create_chunk(cx, cy, cz, seed);
+                let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
+                let compressed = chunk::compress(&blocks);
+
+                let _ = tx.send(ChunkResult {
+                    pos: (cx, cy, cz),
+                    blocks,
+                    compressed,
+                    verts,
+                    inds,
+                });
+            });
+        }
+    
+        // 'o: for y in (cy - Y_RADIUS..=cy + Y_RADIUS).rev() {
+        //     if y < 0 {
+        //         continue;
+        //     }
+        //     for z in cz - RADIUS..=cz + RADIUS {
+        //         for x in cx - RADIUS..=cx + RADIUS {
+        //             let min_pos = Vec3::new(
+        //                 (x * CHUNK_SIZE as i32) as f32,
+        //                 (y * CHUNK_SIZE as i32) as f32,
+        //                 (z * CHUNK_SIZE as i32) as f32,
+        //             );
+        //             let max_pos = min_pos + Vec3::splat(CHUNK_SIZE as f32);
+
+        //             if Camera::is_aabb_in_frustum(min_pos, max_pos, &vp) {
+        //                 if !self.chunks.contains_key(&(x, y, z)) {
+        //                     coords.push((x, y, z));
+        //                     if coords.len() > 2 {
+        //                         break;
+        //                     }
+        //                 }
+        //             }
+
+        //             // if Camera::is_point_in_frustum(Vec3::new((x*CHUNK_SIZE as i32) as f32, (y*CHUNK_SIZE as i32) as f32, (z*CHUNK_SIZE as i32) as f32), &vp) {
+        //             //     println!("{:?}", self.chunks.get(&(x, y, z)));
+        //             //     if !self.chunks.contains_key(&(x, y, z)) {
+        //             //         coords.push((x, y, z));
+        //             //         if coords.len() > 3 {
+        //             //             // break 'o;
+        //             //             break;
+        //             //         }
+        //             //     }
+        //             // }
+        //         }
+        //     }
+        // }
+
+        // if coords.is_empty() {
+        //     return;
+        // }
+
+        // // CPU処理だけ並列化
+        // let cpu_results: Vec<_> = coords
+        //     .par_iter()
+        //     .filter_map(|&(cx, cy, cz)| {
+        //         let (blocks, all_same) = chunk::create_chunk(cx, cy, cz, seed);
+        //         let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
+        //         Some((cx, cy, cz, blocks, all_same, verts, inds))
+        //     })
+        //     .collect();
+
+        // for (cx, cy, cz, blocks, all_same, verts, inds) in cpu_results {
+
+
+
+        // }
     }
 
     // 最初は初期ポジのXZに位置するチャンクだけ作る
@@ -220,7 +300,10 @@ impl Terrain {
         
         }
 
-        Self { chunks }
+        let (chunk_tx, chunk_rx) = mpsc::channel();
+        let chunk_in_progress = HashSet::new();
+
+        Self { chunks, chunk_rx, chunk_tx, chunk_in_progress }
     }
 
     // 指定のワールド座標がソリッドか

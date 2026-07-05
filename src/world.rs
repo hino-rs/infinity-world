@@ -1,4 +1,5 @@
 use glam::Vec3;
+use std::thread;
 
 use crate::camera::Camera;
 use crate::consts::{FOV, RADIUS, Y_RADIUS, Z_FAR, Z_NEAR};
@@ -58,6 +59,8 @@ impl World {
         self.camera.pursue_target(self.player.position);
 
         let player_pos = self.player.position.as_ivec3();
+
+        
         // チャンク生成と掃除
         self.terrain.add_chunks(device, self.seed, player_pos, storage_layout, &self.camera);
         // チャンク境界動いたときにで生成・掃除の高速繰り返しが起きないように若干余裕を持たせる
