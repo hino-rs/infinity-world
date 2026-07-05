@@ -1,5 +1,9 @@
+use crate::{
+    camera::Camera,
+    consts::*,
+    terrain::Terrain,
+};
 use glam::*;
-use crate::{camera::Camera, consts::*, terrain::Terrain, utils::{XZf, XZi}};
 
 /// firstが左下手前、endが右上奥
 pub struct Aabb {
@@ -58,13 +62,15 @@ impl Aabb {
         let max_z = z1.max(z2);
 
         Aabb::compress(AabbFull {
-            min_x, max_x,
-            min_y, max_y,
-            min_z, max_z,
+            min_x,
+            max_x,
+            min_y,
+            max_y,
+            min_z,
+            max_z,
         })
     }
 }
-
 
 pub struct Player {
     pub position: Vec3,
@@ -88,13 +94,12 @@ pub struct PlayerController {
     pub floating: bool,
 }
 
-
 impl Player {
     pub fn new(position: Vec3) -> Self {
-        let cx = position.x.div_euclid(CHUNK_SIZE as f32) as i32;
-        let cy = position.y.div_euclid(CHUNK_SIZE as f32) as i32;
-        let cz = position.z.div_euclid(CHUNK_SIZE as f32) as i32;
-        
+        let cx = position.x.div_euclid(CHUNK_SIZE_F32) as i32;
+        let cy = position.y.div_euclid(CHUNK_SIZE_F32) as i32;
+        let cz = position.z.div_euclid(CHUNK_SIZE_F32) as i32;
+
         Self {
             position,
             velocity_y: 0.0,
@@ -103,9 +108,9 @@ impl Player {
     }
 
     pub fn current_chunk_pos(&self) -> IVec3 {
-        let cx = self.position.x.div_euclid(CHUNK_SIZE as f32) as i32;
-        let cy = self.position.y.div_euclid(CHUNK_SIZE as f32) as i32;
-        let cz = self.position.z.div_euclid(CHUNK_SIZE as f32) as i32;
+        let cx = self.position.x.div_euclid(CHUNK_SIZE_F32) as i32;
+        let cy = self.position.y.div_euclid(CHUNK_SIZE_F32) as i32;
+        let cz = self.position.z.div_euclid(CHUNK_SIZE_F32) as i32;
 
         IVec3::new(cx, cy, cz)
     }
@@ -113,7 +118,7 @@ impl Player {
     pub fn aabb(&self) -> Aabb {
         let min_x = self.position.x - PLAYER_HALF_WIDTH;
         let max_x = self.position.x + PLAYER_HALF_WIDTH;
-        
+
         let min_y = self.position.y - PLAYER_HEIGHT;
         let max_y = self.position.y;
 
@@ -121,9 +126,12 @@ impl Player {
         let max_z = self.position.z + PLAYER_HALF_WIDTH;
 
         Aabb::compress(AabbFull {
-            min_x, max_x,
-            min_y, max_y,
-            min_z, max_z,
+            min_x,
+            max_x,
+            min_y,
+            max_y,
+            min_z,
+            max_z,
         })
     }
 
@@ -137,7 +145,7 @@ impl Player {
         } else {
             self.position.x = try_pos.x;
         }
-        
+
         // --- Z軸（壁判定・奥行き） ---
         let mut try_pos = self.position;
         try_pos.z += delta.z;
@@ -146,7 +154,7 @@ impl Player {
         } else {
             self.position.z = try_pos.z;
         }
-        
+
         // --- Y軸（地面・天井） ---
         let mut try_pos = self.position;
         try_pos.y += delta.y;
@@ -213,10 +221,18 @@ impl PlayerController {
         if self.floating {
             self.velocity_y = 0.0;
             if self.is_up_pressed {
-                self.velocity_y = if self.is_dash_pressed { (7.5 * self.speed).min(30.0) } else { 7.5 };
+                self.velocity_y = if self.is_dash_pressed {
+                    (7.5 * self.speed).min(30.0)
+                } else {
+                    7.5
+                };
             }
             if self.is_down_pressed {
-                self.velocity_y = if self.is_dash_pressed { (-7.5 * self.speed).max(-30.0) } else { -7.5 };
+                self.velocity_y = if self.is_dash_pressed {
+                    (-7.5 * self.speed).max(-30.0)
+                } else {
+                    -7.5
+                };
             }
         } else {
             // 接地中はジャンプ受付、空中は重力

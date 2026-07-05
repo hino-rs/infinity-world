@@ -19,6 +19,8 @@ pub struct Rle {
 //     blocks
 // }
 
+/// ブロック情報をRLE形式へ変換する。
+/// ブロックか空だった場合や、すべて空気だった場合はNoneを返す。
 pub fn compress(blocks: &Option<ChunkBlocks>) -> Option<Vec<Rle>> {
     let Some(blocks) = blocks else {
         return None;
@@ -53,6 +55,7 @@ pub fn compress(blocks: &Option<ChunkBlocks>) -> Option<Vec<Rle>> {
     Some(compressed)
 }
 
+/// RLE形式の配列から、展開後に指定インデクスが該当するブロックタイプを返す。
 pub fn get_block(compressed: &[Rle], index: usize) -> BlockType {
     let mut current_index = 0;
     for rle in compressed {
@@ -65,29 +68,39 @@ pub fn get_block(compressed: &[Rle], index: usize) -> BlockType {
     BlockType::Air
 }
 
-pub fn create_chunk(chunk_x: i32, chunk_y: i32, chunk_z: i32, seed: u32) -> (Option<ChunkBlocks>, bool) {
+/// チャンク座標を基にノイズを通してチャンクを作る
+pub fn create_chunk(
+    chunk_x: i32,
+    chunk_y: i32,
+    chunk_z: i32,
+    seed: u32,
+) -> (Option<ChunkBlocks>, bool) {
     let mut blocks = [BlockType::Air; NUM_CHUNK_BLOCKS];
     let mut all_same = true;
 
-    if (chunk_y * CHUNK_SIZE as i32) > MAX_HEIGHT || chunk_y < 0 {
+    if (chunk_y * CHUNK_SIZE_I32) > MAX_HEIGHT || chunk_y < 0 {
         return (None, true);
-    }; 
+    };
 
     for x in 0..CHUNK_SIZE {
         for z in 0..CHUNK_SIZE {
-            let wx = (chunk_x * CHUNK_SIZE as i32 + x as i32) as f64;
-            let wz = (chunk_z * CHUNK_SIZE as i32 + z as i32) as f64;
+            let wx = (chunk_x * CHUNK_SIZE_I32 + x as i32) as f64;
+            let wz = (chunk_z * CHUNK_SIZE_I32 + z as i32) as f64;
 
             let r = domain_warp(wx, 0.0, wz, seed, 1.0, 3200.0);
-            let h = (r * 516.0 + CHUNK_SIZE as f64).round() as i32;
+            let h = (r * 516.0 + CHUNK_SIZE_F64).round() as i32;
 
             for y in 0..CHUNK_SIZE {
-                let wy = chunk_y * CHUNK_SIZE as i32 + y as i32;
+                let wy = chunk_y * CHUNK_SIZE_I32 + y as i32;
                 let index = Chunk::index(x, y, z);
 
                 if wy <= h {
                     blocks[index] = if wy == h {
-                        if h > 45 { BlockType::Stone } else { BlockType::Grass }
+                        if h > 45 {
+                            BlockType::Stone
+                        } else {
+                            BlockType::Grass
+                        }
                     } else if wy >= h - DIRT_DEPTH {
                         BlockType::Dirt
                     } else {
@@ -100,12 +113,11 @@ pub fn create_chunk(chunk_x: i32, chunk_y: i32, chunk_z: i32, seed: u32) -> (Opt
                 }
 
                 if index > 1 && all_same {
-                    if blocks[index] != blocks[index-1] {
+                    if blocks[index] != blocks[index - 1] {
                         all_same = false;
                     }
                 }
             }
-            
         }
     }
 

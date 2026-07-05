@@ -17,12 +17,14 @@ use crate::world::World;
 
 static FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-VariableFont_wght.ttf");
 
+/// アプリケーション設定。起動時のコマンドにする。
 #[derive(Default)]
 pub struct AppOption {
     pub fullscreen: bool,
     pub debug: bool,
 }
 
+/// アプリケーション本体
 pub struct Application {
     pub window: Option<Arc<Window>>,
     pub gpu: Option<GpuContext>,

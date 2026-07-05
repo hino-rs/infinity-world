@@ -52,7 +52,6 @@ impl FpsCounter {
         self.cached_fps
     }
 
-    // フレーム時間
     pub fn frame_time_ms(&self) -> f64 {
         if let Some(&last) = self.frame_times.back() {
             last * 1000.0
@@ -61,7 +60,6 @@ impl FpsCounter {
         }
     }
 
-    // 最小FPS
     pub fn min_fps(&self) -> f64 {
         if self.max_frame_time > 0.0 {
             1.0 / self.max_frame_time
@@ -70,7 +68,6 @@ impl FpsCounter {
         }
     }
 
-    // 最大FPS
     pub fn max_fps(&self) -> f64 {
         if self.min_frame_time < f64::MAX {
             1.0 / self.min_frame_time
@@ -79,7 +76,6 @@ impl FpsCounter {
         }
     }
 
-    // サンプルのリセット
     pub fn reset_stats(&mut self) {
         self.min_frame_time = f64::MAX;
         self.max_frame_time = 0.0;

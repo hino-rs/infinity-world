@@ -1,10 +1,7 @@
-use glam::{IVec3, Vec3};
+use glam::IVec3;
 
-use crate::camera::Camera;
 use crate::consts::*;
-use crate::game::BlockType::{Air, Water};
 use crate::noise::*;
-use crate::utils::IndexVec;
 use crate::{game::BlockType, terrain::*};
 
 /// 地形の頂点データ
@@ -72,7 +69,7 @@ pub fn calc_ao(side1: bool, side2: bool, corner: bool) -> u8 {
     3 - (side1 as u8 + side2 as u8 + corner as u8)
 }
 
-// 1列分の地表の高さを2Dで決める
+/// 1列分の地表の高さを2Dで決める
 pub fn _surface_height(wx: f64, wz: f64, seed: u32) -> i32 {
     // 平地の起伏
     let hills = get_fbm(wx / 80.0, 0.0, wz / 80.0, seed, 4) * 6.0;
@@ -86,15 +83,10 @@ pub fn _surface_height(wx: f64, wz: f64, seed: u32) -> i32 {
     (SEA_LEVEL as f64 + hills + mountains).round() as i32
 }
 
-// 周辺ブロックが不透明ブロックかどうかを調べる
-// チャンク外は空気(非ソリッド)とみなす
+/// 周辺ブロックが不透明ブロックかどうかを調べる。
+/// チャンク外は空気(非ソリッド)とみなす。
 pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
-    if x < 0
-        || x >= CHUNK_SIZE as i32
-        || y < 0
-        || y >= CHUNK_SIZE as i32
-        || z < 0
-        || z >= CHUNK_SIZE as i32
+    if x < 0 || x >= CHUNK_SIZE_I32 || y < 0 || y >= CHUNK_SIZE_I32 || z < 0 || z >= CHUNK_SIZE_I32
     {
         return false;
     }
@@ -105,6 +97,7 @@ pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
 
 type Mask = [[Option<(BlockType, [f32; 4])>; CHUNK_SIZE]; CHUNK_SIZE];
 
+/// ブロック配列からAO付きグリーディメッシュを作る。
 pub fn build_chunk_mesh(
     blocks: &Option<ChunkBlocks>,
     chunk_x: i32,
@@ -120,9 +113,9 @@ pub fn build_chunk_mesh(
     let mut indices = Vec::new();
 
     // チャンクの左下隅のワールド座標
-    let offset_x = (chunk_x * CHUNK_SIZE as i32) as f32;
-    let offset_y = (chunk_y * CHUNK_SIZE as i32) as f32;
-    let offset_z = (chunk_z * CHUNK_SIZE as i32) as f32;
+    let offset_x = (chunk_x * CHUNK_SIZE_I32) as f32;
+    let offset_y = (chunk_y * CHUNK_SIZE_I32) as f32;
+    let offset_z = (chunk_z * CHUNK_SIZE_I32) as f32;
 
     // --- 上面 (+Y) のグリーディメッシュ ---
     for y in 0..CHUNK_SIZE {
@@ -136,10 +129,38 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi + 1, zi, blocks) {
                     let index = Chunk::index(x, y, z);
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi + 1, zi, blocks),
+                                is_solid(xi, yi + 1, zi - 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi + 1, zi, blocks),
+                                is_solid(xi, yi + 1, zi - 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi + 1, zi, blocks),
+                                is_solid(xi, yi + 1, zi + 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi + 1, zi, blocks),
+                                is_solid(xi, yi + 1, zi + 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
                     mask[x][z] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
@@ -149,7 +170,9 @@ pub fn build_chunk_mesh(
             for x in 0..CHUNK_SIZE {
                 if let Some((block_type, ao_factors)) = mask[x][z] {
                     let mut width = 1;
-                    while x + width < CHUNK_SIZE && mask[x + width][z] == Some((block_type, ao_factors)) {
+                    while x + width < CHUNK_SIZE
+                        && mask[x + width][z] == Some((block_type, ao_factors))
+                    {
                         width += 1;
                     }
 
@@ -230,10 +253,38 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi - 1, zi, blocks) {
                     let index = Chunk::index(x, y, z);
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi - 1, zi, blocks),
+                                is_solid(xi, yi - 1, zi - 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi - 1, zi, blocks),
+                                is_solid(xi, yi - 1, zi - 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi - 1, zi, blocks),
+                                is_solid(xi, yi - 1, zi + 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi - 1, zi, blocks),
+                                is_solid(xi, yi - 1, zi + 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
                     mask[x][z] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
@@ -243,7 +294,9 @@ pub fn build_chunk_mesh(
             for x in 0..CHUNK_SIZE {
                 if let Some((block_type, ao_factors)) = mask[x][z] {
                     let mut width = 1;
-                    while x + width < CHUNK_SIZE && mask[x + width][z] == Some((block_type, ao_factors)) {
+                    while x + width < CHUNK_SIZE
+                        && mask[x + width][z] == Some((block_type, ao_factors))
+                    {
                         width += 1;
                     }
 
@@ -324,10 +377,38 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi, zi - 1, blocks) {
                     let index = Chunk::index(x, y, z);
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi, zi - 1, blocks),
+                                is_solid(xi, yi - 1, zi - 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi, zi - 1, blocks),
+                                is_solid(xi, yi - 1, zi - 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi, zi - 1, blocks),
+                                is_solid(xi, yi + 1, zi - 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi, zi - 1, blocks),
+                                is_solid(xi, yi + 1, zi - 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
                     mask[x][y] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
@@ -337,7 +418,9 @@ pub fn build_chunk_mesh(
             for x in 0..CHUNK_SIZE {
                 if let Some((block_type, ao_factors)) = mask[x][y] {
                     let mut width = 1;
-                    while x + width < CHUNK_SIZE && mask[x + width][y] == Some((block_type, ao_factors)) {
+                    while x + width < CHUNK_SIZE
+                        && mask[x + width][y] == Some((block_type, ao_factors))
+                    {
                         width += 1;
                     }
 
@@ -418,10 +501,38 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi, zi + 1, blocks) {
                     let index = Chunk::index(x, y, z);
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi, zi + 1, blocks),
+                                is_solid(xi, yi - 1, zi + 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi, zi + 1, blocks),
+                                is_solid(xi, yi - 1, zi + 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi, zi + 1, blocks),
+                                is_solid(xi, yi + 1, zi + 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi, zi + 1, blocks),
+                                is_solid(xi, yi + 1, zi + 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
                     mask[x][y] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
@@ -431,7 +542,9 @@ pub fn build_chunk_mesh(
             for x in 0..CHUNK_SIZE {
                 if let Some((block_type, ao_factors)) = mask[x][y] {
                     let mut width = 1;
-                    while x + width < CHUNK_SIZE && mask[x + width][y] == Some((block_type, ao_factors)) {
+                    while x + width < CHUNK_SIZE
+                        && mask[x + width][y] == Some((block_type, ao_factors))
+                    {
                         width += 1;
                     }
 
@@ -512,10 +625,38 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi - 1, yi, zi, blocks) {
                     let index = Chunk::index(x, y, z);
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi - 1, zi, blocks),
+                                is_solid(xi - 1, yi, zi - 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi + 1, zi, blocks),
+                                is_solid(xi - 1, yi, zi - 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi + 1, zi, blocks),
+                                is_solid(xi - 1, yi, zi + 1, blocks),
+                                is_solid(xi - 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi - 1, yi - 1, zi, blocks),
+                                is_solid(xi - 1, yi, zi + 1, blocks),
+                                is_solid(xi - 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
                     mask[z][y] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
@@ -525,7 +666,9 @@ pub fn build_chunk_mesh(
             for z in 0..CHUNK_SIZE {
                 if let Some((block_type, ao_factors)) = mask[z][y] {
                     let mut width = 1;
-                    while z + width < CHUNK_SIZE && mask[z + width][y] == Some((block_type, ao_factors)) {
+                    while z + width < CHUNK_SIZE
+                        && mask[z + width][y] == Some((block_type, ao_factors))
+                    {
                         width += 1;
                     }
 
@@ -606,10 +749,38 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi + 1, yi, zi, blocks) {
                     let index = Chunk::index(x, y, z);
-                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
-                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
-                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f0 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi - 1, zi, blocks),
+                                is_solid(xi + 1, yi, zi - 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f1 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi - 1, zi, blocks),
+                                is_solid(xi + 1, yi, zi + 1, blocks),
+                                is_solid(xi + 1, yi - 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f2 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi + 1, zi, blocks),
+                                is_solid(xi + 1, yi, zi + 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi + 1, blocks),
+                            ) as f32
+                                / 3.0);
+                    let f3 = 0.25
+                        + 0.75
+                            * (calc_ao(
+                                is_solid(xi + 1, yi + 1, zi, blocks),
+                                is_solid(xi + 1, yi, zi - 1, blocks),
+                                is_solid(xi + 1, yi + 1, zi - 1, blocks),
+                            ) as f32
+                                / 3.0);
                     mask[z][y] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
@@ -619,7 +790,9 @@ pub fn build_chunk_mesh(
             for z in 0..CHUNK_SIZE {
                 if let Some((block_type, ao_factors)) = mask[z][y] {
                     let mut width = 1;
-                    while z + width < CHUNK_SIZE && mask[z + width][y] == Some((block_type, ao_factors)) {
+                    while z + width < CHUNK_SIZE
+                        && mask[z + width][y] == Some((block_type, ao_factors))
+                    {
                         width += 1;
                     }
 
