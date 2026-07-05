@@ -1,3 +1,6 @@
+use glam::{IVec3, Vec3};
+
+use crate::camera::Camera;
 use crate::consts::*;
 use crate::game::BlockType::{Air, Water};
 use crate::noise::*;
@@ -93,11 +96,13 @@ pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
     blocks[index] != BlockType::Air
 }
 
+
 pub fn build_chunk_mesh(
     blocks: &Option<ChunkBlocks>,
     chunk_x: i32,
     chunk_y: i32,
     chunk_z: i32,
+    camera_pos: IVec3,
 ) -> (Vec<TerrainVertex>, Vec<u32>) {
     let Some(blocks) = blocks else {
         return (vec![TerrainVertex::none()], vec![0]);
@@ -105,6 +110,65 @@ pub fn build_chunk_mesh(
 
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
+
+
+    // println!("{dist_from_camera}");
+    // if dist_from_camera > (RADIUS as i32) {
+    //     let size = CHUNK_SIZE as f32;
+    //     let ox = (chunk_x * CHUNK_SIZE as i32) as f32 - 0.5;
+    //     let oy = (chunk_y * CHUNK_SIZE as i32) as f32 - 0.5;
+    //     let oz = (chunk_z * CHUNK_SIZE as i32) as f32 - 0.5;
+
+    //     // 上面 (+Y)
+    //     let start_idx = vertices.len() as u32;
+    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz       ], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 1.0 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz       ], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 1.0 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz + size], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 1.0 });
+    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz + size], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 1.0 });
+    //     indices.extend_from_slice(&[start_idx, start_idx + 3, start_idx + 2, start_idx, start_idx + 2, start_idx + 1]);
+
+    //     // 下面 (-Y)
+    //     let start_idx = vertices.len() as u32;
+    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz       ], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 0.5 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz       ], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 0.5 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz + size], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 0.5 });
+    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz + size], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 0.5 });
+    //     indices.extend_from_slice(&[start_idx, start_idx + 1, start_idx + 2, start_idx, start_idx + 2, start_idx + 3]);
+
+    //     // 後面 (-Z)
+    //     let start_idx = vertices.len() as u32;
+    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz       ], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 0.8 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz       ], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 0.8 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz       ], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 0.8 });
+    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz       ], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 0.8 });
+    //     indices.extend_from_slice(&[start_idx, start_idx + 3, start_idx + 2, start_idx, start_idx + 2, start_idx + 1]);
+
+    //     // 前面 (+Z)
+    //     let start_idx = vertices.len() as u32;
+    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz + size], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 0.8 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz + size], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 0.8 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz + size], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 0.8 });
+    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz + size], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 0.8 });
+    //     indices.extend_from_slice(&[start_idx, start_idx + 1, start_idx + 2, start_idx, start_idx + 2, start_idx + 3]);
+
+    //     // 左面 (-X)
+    //     let start_idx = vertices.len() as u32;
+    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz       ], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 0.6 });
+    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz       ], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 0.6 });
+    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz + size], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 0.6 });
+    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz + size], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 0.6 });
+    //     indices.extend_from_slice(&[start_idx, start_idx + 3, start_idx + 2, start_idx, start_idx + 2, start_idx + 1]);
+
+    //     // 右面 (+X)
+    //     let start_idx = vertices.len() as u32;
+    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz       ], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 0.6 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz + size], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 0.6 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz + size], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 0.6 });
+    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz       ], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 0.6 });
+    //     indices.extend_from_slice(&[start_idx, start_idx + 3, start_idx + 2, start_idx, start_idx + 2, start_idx + 1]);
+
+    //     return (vertices, indices);
+    // }
 
     // チャンクの左下隅のワールド座標
     let offset_x = (chunk_x * CHUNK_SIZE as i32) as f32;

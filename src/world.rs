@@ -23,12 +23,9 @@ impl World {
     ) -> World {
         let seed = rand::random::<u32>();
         let initial_position = Vec3::new(0.0, 100.0, 0.0);
-        let terrain = Terrain::new(device, seed, initial_position, storage_layout);
-        let player = Player::new(initial_position);
-        let player_controller = PlayerController::default();
 
         let camera = Camera::new(
-            Vec3::new(5.0, 100.0, 5.0),
+            initial_position,
             0.0f32.to_radians(),
             -20.0f32.to_radians(),
             aspect,
@@ -36,6 +33,10 @@ impl World {
             Z_NEAR,
             Z_FAR,
         );
+
+        let terrain = Terrain::new(device, seed, initial_position, storage_layout, camera.eye);
+        let player = Player::new(initial_position);        
+        let player_controller = PlayerController::default();
 
         Self {
             player,
@@ -64,12 +65,15 @@ impl World {
 
         
         if self.ticks % 2 == 0 {
-            // チャンク生成と掃除
+            // チャンク生成
             self.terrain.add_chunks(device, self.seed, player_pos, storage_layout, &self.camera);
-            // チャンク境界動いたときにで生成・掃除の高速繰り返しが起きないように若干余裕を持たせる
-            if self.terrain.chunks.len() > ((RADIUS*2+3)*(Y_RADIUS*2+3)*(RADIUS*2+3)) as usize {
-                self.terrain.clear_chunks(player_pos);
-            }
+        }
+
+        let prev_player_pos = self.player.current_chunk_pos;
+        let current_player_pos = self.player.current_chunk_pos();
+        if prev_player_pos != current_player_pos {
+            self.player.current_chunk_pos = current_player_pos;
+            self.terrain.clear_chunks(player_pos);
         }
         
         self.ticks = self.ticks.wrapping_add_signed(1);

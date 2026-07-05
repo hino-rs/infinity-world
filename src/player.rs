@@ -69,6 +69,7 @@ impl Aabb {
 pub struct Player {
     pub position: Vec3,
     velocity_y: f32,
+    pub current_chunk_pos: IVec3,
 }
 
 #[derive(Default)]
@@ -90,10 +91,23 @@ pub struct PlayerController {
 
 impl Player {
     pub fn new(position: Vec3) -> Self {
+        let cx = position.x.div_euclid(CHUNK_SIZE as f32) as i32;
+        let cy = position.y.div_euclid(CHUNK_SIZE as f32) as i32;
+        let cz = position.z.div_euclid(CHUNK_SIZE as f32) as i32;
+        
         Self {
             position,
             velocity_y: 0.0,
+            current_chunk_pos: IVec3::new(cx, cy, cz),
         }
+    }
+
+    pub fn current_chunk_pos(&self) -> IVec3 {
+        let cx = self.position.x.div_euclid(CHUNK_SIZE as f32) as i32;
+        let cy = self.position.y.div_euclid(CHUNK_SIZE as f32) as i32;
+        let cz = self.position.z.div_euclid(CHUNK_SIZE as f32) as i32;
+
+        IVec3::new(cx, cy, cz)
     }
 
     pub fn aabb(&self) -> Aabb {
@@ -167,7 +181,7 @@ impl PlayerController {
         let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize();
 
         self.speed = if self.is_dash_pressed {
-            PLAYER_WALK_SPEED * 5.0
+            PLAYER_WALK_SPEED * 50.0
         } else {
             PLAYER_WALK_SPEED
         };
