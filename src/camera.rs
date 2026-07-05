@@ -117,13 +117,14 @@ impl Camera {
         .normalize()
     }
 
-    pub fn build_view_projection_matrix(&self) -> Mat4 {
+    /// ビュー・プロジェクション行列を作る
+    pub fn build_view_projection_matrix(&self, pull: f32) -> Mat4 {
         let forward = self.calc_forward();
         // カメラの向きを行列にする (位置, 注視点, 上下方向ヒント)
         // 世界座標系のすべての点を「カメラから見たらどこにあるか」に変換するため
-        let view = Mat4::look_at_rh(self.eye, self.eye + forward, Vec3::Y);
-        // 遠近感を行列にする
-        let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
+        let view = Mat4::look_at_rh(self.eye*pull, self.eye + forward, Vec3::Y);
+        // 遠近感を行列にする 
+        let proj = Mat4::perspective_infinite_reverse_rh(self.fovy, self.aspect, self.znear);
         // まとめる
         proj * view
     }
@@ -131,15 +132,6 @@ impl Camera {
     /// ターゲットに追従
     pub fn pursue_target(&mut self, target: Vec3) {
         self.eye = target;
-    }
-
-    /// ビュー・プロジェクション行列を作る
-    pub fn get_view_proj_matrix(&self) -> Mat4 {
-        let front = self.calc_forward();
-        let pulled_eye = self.eye - front * 100.0;
-        let view = Mat4::look_to_rh(pulled_eye, front, Vec3::Y);
-        let proj = Mat4::perspective_rh_gl(self.fovy, self.aspect, 0.0, self.zfar);
-        proj * view
     }
 
     /// 指定したワールド座標がカメラの視界内にあるかを判定する
@@ -162,7 +154,7 @@ impl CameraUniform {
     }
 
     pub fn update_view_proj(&mut self, camera: &Camera) {
-        let view_proj = camera.build_view_projection_matrix();
+        let view_proj = camera.build_view_projection_matrix(1.0);
         self.view_proj = view_proj.to_cols_array_2d();
         // 逆行列
         self.inv_view_proj = view_proj.inverse().to_cols_array_2d();

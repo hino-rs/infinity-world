@@ -43,6 +43,7 @@ fn vs_main(
 
     var base_color = vec4f(1.0);
     switch block_type {
+        // --- 基本 ---
         case 0u:    { base_color = vec4f(0.0); }                      // Air
         case 1u:    { base_color = vec4f(0.4, 0.4, 0.4, 1.0); }       // Stone
         case 2u:    { base_color = vec4f(0.7, 0.45, 0.25, 1.0); }     // Dirt
@@ -123,10 +124,10 @@ fn vs_sky(@builtin(vertex_index) vertex_index: u32) -> VsOutSky {
     let x = f32(i32(vertex_index & 1u) * 4 - 1);
     let y = f32(i32(vertex_index & 2u) * 2 - 1);
     // Z値を最遠にすることで背景として配置
-    out.clip_pos = vec4f(x, y, 1.0, 1.0);
+    out.clip_pos = vec4f(x, y, 0.0, 1.0);
 
     // 画面上の2D座標を、逆行列を使って3Dへ
-    let trget = camera.inv_view_proj * vec4f(x, y, 1.0, 1.0);
+    let trget = camera.inv_view_proj * vec4f(x, y, 0.0, 1.0);
 
     // 3D座標に戻し、カメラ位置を引いてカメラからの視線方向ベクトルを求める
     out.view_dir = (trget.xyz / trget.w) - camera.eye_position.xyz;

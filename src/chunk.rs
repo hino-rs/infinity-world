@@ -66,10 +66,8 @@ pub fn get_block(compressed: &[Rle], index: usize) -> BlockType {
 }
 
 pub fn create_chunk(chunk_x: i32, chunk_y: i32, chunk_z: i32, seed: u32) -> (Option<ChunkBlocks>, bool) {
-    let now = std::time::Instant::now();
-
     let mut blocks = [BlockType::Air; NUM_CHUNK_BLOCKS];
-    let mut air_count = 0;
+    let mut all_same = true;
 
     if (chunk_y * CHUNK_SIZE as i32) > MAX_HEIGHT || chunk_y < 0 {
         return (None, true);
@@ -80,8 +78,8 @@ pub fn create_chunk(chunk_x: i32, chunk_y: i32, chunk_z: i32, seed: u32) -> (Opt
             let wx = (chunk_x * CHUNK_SIZE as i32 + x as i32) as f64;
             let wz = (chunk_z * CHUNK_SIZE as i32 + z as i32) as f64;
 
-            let r = domain_warp(wx, 0.0, wz, seed, 1.0, 320.0);
-            let h = (r * 32.0 * 3.0 + CHUNK_SIZE as f64).round() as i32;
+            let r = domain_warp(wx, 0.0, wz, seed, 1.0, 3200.0);
+            let h = (r * 516.0 + CHUNK_SIZE as f64).round() as i32;
 
             for y in 0..CHUNK_SIZE {
                 let wy = chunk_y * CHUNK_SIZE as i32 + y as i32;
@@ -101,16 +99,17 @@ pub fn create_chunk(chunk_x: i32, chunk_y: i32, chunk_z: i32, seed: u32) -> (Opt
                     blocks[index] = BlockType::Air;
                 }
 
-                if blocks[index] == BlockType::Air {
-                    air_count += 1;
+                if index > 1 && all_same {
+                    if blocks[index] != blocks[index-1] {
+                        all_same = false;
+                    }
                 }
             }
             
         }
     }
 
-    println!("{}", now.elapsed().as_secs_f64());
-    if air_count == NUM_CHUNK_BLOCKS {
+    if all_same {
         return (None, true);
     }
     (Some(blocks), false)

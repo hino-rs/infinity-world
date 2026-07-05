@@ -28,6 +28,7 @@ fn main() {
         match a.as_str() {
             "full" => option.fullscreen = true,
             "poll" => event_loop.set_control_flow(ControlFlow::Poll),
+            "debug" => option.debug = true,
             _ => {}
         }
     });

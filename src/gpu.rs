@@ -155,7 +155,7 @@ impl GpuContext {
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &render_info.depth_view,
                     depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0), // 初期最大深度
+                        load: wgpu::LoadOp::Clear(0.0), // 初期最大深度
                         store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,

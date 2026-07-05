@@ -114,13 +114,13 @@ impl Terrain {
         let cpu_results: Vec<_> = coords
             .par_iter()
             .filter_map(|&(cx, cy, cz)| {
-                let (blocks, all_air) = chunk::create_chunk(cx, cy, cz, seed);
+                let (blocks, all_same) = chunk::create_chunk(cx, cy, cz, seed);
                 let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
-                Some((cx, cy, cz, blocks, verts, inds))
+                Some((cx, cy, cz, blocks, all_same, verts, inds))
             })
             .collect();
 
-        for (cx, cy, cz, blocks, verts, inds) in cpu_results {
+        for (cx, cy, cz, blocks, all_same, verts, inds) in cpu_results {
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Chunk Vertex Buffer"),
                 contents: bytemuck::cast_slice(&verts),
@@ -271,7 +271,7 @@ impl Terrain {
         let mut positions: Vec<ChunkPos> = Vec::with_capacity(((RADIUS * 2 + 1) * RADIUS) as usize);
         let pcx = camera.eye.x.div_euclid(CHUNK_SIZE as f32) as i32;
         let pcz = camera.eye.z.div_euclid(CHUNK_SIZE as f32) as i32;
-        let vp = camera.get_view_proj_matrix();
+        let vp = camera.build_view_projection_matrix(100.0);
 
         for chunk_pos in self.chunks.keys() {
             let (cx, cy, cz) = *chunk_pos;

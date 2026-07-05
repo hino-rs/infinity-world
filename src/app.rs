@@ -20,6 +20,7 @@ static FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-VariableFo
 #[derive(Default)]
 pub struct AppOption {
     pub fullscreen: bool,
+    pub debug: bool,
 }
 
 pub struct Application {
@@ -144,10 +145,12 @@ impl ApplicationHandler for Application {
                 }
             }
             WindowEvent::RedrawRequested => {
-                self.frames += 1;
-                if self.now.elapsed().as_secs() > 60 {
-                    println!("総フレーム数: {}", self.frames);
-                    panic!();
+                if self.option.debug {
+                    self.frames += 1;
+                    if self.now.elapsed().as_secs() > 60 {
+                        println!("総フレーム数: {}", self.frames);
+                        panic!();
+                    }
                 }
 
                 let now = Instant::now();
