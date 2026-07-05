@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use glam::{IVec3, Vec3};
+use glam::{IVec3, Vec3, Vec4};
 use num_traits::{AsPrimitive, Num};
 use rayon::prelude::*;
 use wgpu::util::DeviceExt;
@@ -73,7 +73,10 @@ impl Terrain {
         seed: u32,
         center: IVec3,
         layout: &wgpu::BindGroupLayout,
+        camera: &Camera,
     ) {
+        let vp = camera.build_view_projection_matrix(1.0);
+       
         let mut coords = Vec::new();
 
         // 現在地が位置するチャンク
@@ -95,13 +98,32 @@ impl Terrain {
             }
             for z in cz - RADIUS..=cz + RADIUS {
                 for x in cx - RADIUS..=cx + RADIUS {
-                    if !self.chunks.contains_key(&(x, y, z)) {
-                        coords.push((x, y, z));
-                        if coords.len() > 1 {
-                            break;
-                            // break 'o;
+                    let min_pos = Vec3::new(
+                        (x * CHUNK_SIZE as i32) as f32,
+                        (y * CHUNK_SIZE as i32) as f32,
+                        (z * CHUNK_SIZE as i32) as f32,
+                    );
+                    let max_pos = min_pos + Vec3::splat(CHUNK_SIZE as f32);
+
+                    if Camera::is_aabb_in_frustum(min_pos, max_pos, &vp) {
+                        if !self.chunks.contains_key(&(x, y, z)) {
+                            coords.push((x, y, z));
+                            if coords.len() > 2 {
+                                break;
+                            }
                         }
                     }
+
+                    // if Camera::is_point_in_frustum(Vec3::new((x*CHUNK_SIZE as i32) as f32, (y*CHUNK_SIZE as i32) as f32, (z*CHUNK_SIZE as i32) as f32), &vp) {
+                    //     println!("{:?}", self.chunks.get(&(x, y, z)));
+                    //     if !self.chunks.contains_key(&(x, y, z)) {
+                    //         coords.push((x, y, z));
+                    //         if coords.len() > 3 {
+                    //             // break 'o;
+                    //             break;
+                    //         }
+                    //     }
+                    // }
                 }
             }
         }

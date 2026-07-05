@@ -129,6 +129,36 @@ impl Camera {
         proj * view
     }
 
+    /// 指定したAABBがカメラの視錐台内にあるかを判定する
+    pub fn is_aabb_in_frustum(min: Vec3, max: Vec3, vp: &Mat4) -> bool {
+        let row0 = vp.row(0);
+        let row1 = vp.row(1);
+        let row2 = vp.row(2);
+        let row3 = vp.row(3);
+        // 視錐台の6つのクリッピング平面を抽出
+        let planes = [
+            row3 + row0, // Left
+            row3 - row0, // Right
+            row3 + row1, // Bottom
+            row3 - row1, // Top
+            row2,        // Near
+            row3 - row2, // Far
+        ];
+        for plane in &planes {
+            // 平面の法線方向に最も進んでいる AABB の頂点 (p-vertex) を選ぶ
+            let p_vertex = Vec3::new(
+                if plane.x >= 0.0 { max.x } else { min.x },
+                if plane.y >= 0.0 { max.y } else { min.y },
+                if plane.z >= 0.0 { max.z } else { min.z },
+            );
+            // その頂点すら平面の外側（負の領域）にある場合、AABB全体が視錐台の外にある
+            if plane.dot(p_vertex.extend(1.0)) < 0.0 {
+                return false;
+            }
+        }
+        true
+    }
+
     /// ターゲットに追従
     pub fn pursue_target(&mut self, target: Vec3) {
         self.eye = target;
@@ -138,9 +168,10 @@ impl Camera {
     pub fn is_point_in_frustum(point_world: Vec3, vp: &Mat4) -> bool {
         let point_clip = *vp * point_world.extend(1.0);
         let w = point_clip.w;
+        if w < 0.0 { return false; }
         -w <= point_clip.x && point_clip.x <= w &&
         -w <= point_clip.y && point_clip.y <= w &&
-        -w <= point_clip.z && point_clip.z <= w
+        0.0 <= point_clip.z && point_clip.z <= w
     }
 }
 
