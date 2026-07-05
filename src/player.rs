@@ -181,7 +181,8 @@ impl PlayerController {
         let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize();
 
         self.speed = if self.is_dash_pressed {
-            PLAYER_WALK_SPEED * 50.0
+            self.speed = (self.speed * 1.05).min(250.0);
+            self.speed
         } else {
             PLAYER_WALK_SPEED
         };
@@ -212,10 +213,10 @@ impl PlayerController {
         if self.floating {
             self.velocity_y = 0.0;
             if self.is_up_pressed {
-                self.velocity_y = 7.5;
+                self.velocity_y = if self.is_dash_pressed { (7.5 * self.speed).min(30.0) } else { 7.5 };
             }
             if self.is_down_pressed {
-                self.velocity_y = -7.5;
+                self.velocity_y = if self.is_dash_pressed { (-7.5 * self.speed).max(-30.0) } else { -7.5 };
             }
         } else {
             // 接地中はジャンプ受付、空中は重力

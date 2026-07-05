@@ -150,7 +150,7 @@ impl Terrain {
         }
 
         // --- 新規生成が必要なチャンク座標の探索 ---
-        let max_pending = 16;
+        let max_pending = 32;
         if self.chunk_in_progress.len() >= max_pending {
             return;
         }

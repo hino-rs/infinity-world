@@ -103,6 +103,8 @@ pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
     blocks[index] != BlockType::Air
 }
 
+type Mask = [[Option<(BlockType, [f32; 4])>; CHUNK_SIZE]; CHUNK_SIZE];
+
 pub fn build_chunk_mesh(
     blocks: &Option<ChunkBlocks>,
     chunk_x: i32,
@@ -124,7 +126,7 @@ pub fn build_chunk_mesh(
 
     // --- 上面 (+Y) のグリーディメッシュ ---
     for y in 0..CHUNK_SIZE {
-        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
         for x in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
@@ -134,23 +136,27 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi + 1, zi, blocks) {
                     let index = Chunk::index(x, y, z);
-                    mask[x][z] = Some(blocks[index]);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    mask[x][z] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
         }
 
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                if let Some(block_type) = mask[x][z] {
+                if let Some((block_type, ao_factors)) = mask[x][z] {
                     let mut width = 1;
-                    while x + width < CHUNK_SIZE && mask[x + width][z] == Some(block_type) {
+                    while x + width < CHUNK_SIZE && mask[x + width][z] == Some((block_type, ao_factors)) {
                         width += 1;
                     }
 
                     let mut height = 1;
                     'o: while z + height < CHUNK_SIZE {
                         for dx in 0..width {
-                            if mask[x + dx][z + height] != Some(block_type) {
+                            if mask[x + dx][z + height] != Some((block_type, ao_factors)) {
                                 break 'o;
                             }
                         }
@@ -168,28 +174,28 @@ pub fn build_chunk_mesh(
                         position: [bx - 0.5, by + 0.5, bz - 0.5],
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[0],
                         normal: [0.0, 1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by + 0.5, bz - 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[1],
                         normal: [0.0, 1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by + 0.5, bz + height as f32 - 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[2],
                         normal: [0.0, 1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + 0.5, bz + height as f32 - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[3],
                         normal: [0.0, 1.0, 0.0],
                     });
 
@@ -214,7 +220,7 @@ pub fn build_chunk_mesh(
 
     // --- 下面 (-Y) のグリーディメッシュ ---
     for y in 0..CHUNK_SIZE {
-        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
         for x in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
@@ -224,23 +230,27 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi - 1, zi, blocks) {
                     let index = Chunk::index(x, y, z);
-                    mask[x][z] = Some(blocks[index]);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    mask[x][z] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
         }
 
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                if let Some(block_type) = mask[x][z] {
+                if let Some((block_type, ao_factors)) = mask[x][z] {
                     let mut width = 1;
-                    while x + width < CHUNK_SIZE && mask[x + width][z] == Some(block_type) {
+                    while x + width < CHUNK_SIZE && mask[x + width][z] == Some((block_type, ao_factors)) {
                         width += 1;
                     }
 
                     let mut height = 1;
                     'o: while z + height < CHUNK_SIZE {
                         for dx in 0..width {
-                            if mask[x + dx][z + height] != Some(block_type) {
+                            if mask[x + dx][z + height] != Some((block_type, ao_factors)) {
                                 break 'o;
                             }
                         }
@@ -258,28 +268,28 @@ pub fn build_chunk_mesh(
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[0],
                         normal: [0.0, -1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by - 0.5, bz - 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[1],
                         normal: [0.0, -1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by - 0.5, bz + height as f32 - 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[2],
                         normal: [0.0, -1.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz + height as f32 - 0.5],
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[3],
                         normal: [0.0, -1.0, 0.0],
                     });
 
@@ -304,7 +314,7 @@ pub fn build_chunk_mesh(
 
     // --- 後ろ面 (-Z) のグリーディメッシュ ---
     for z in 0..CHUNK_SIZE {
-        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
@@ -314,23 +324,27 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi, zi - 1, blocks) {
                     let index = Chunk::index(x, y, z);
-                    mask[x][y] = Some(blocks[index]);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi, yi - 1, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi, yi + 1, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    mask[x][y] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
         }
 
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                if let Some(block_type) = mask[x][y] {
+                if let Some((block_type, ao_factors)) = mask[x][y] {
                     let mut width = 1;
-                    while x + width < CHUNK_SIZE && mask[x + width][y] == Some(block_type) {
+                    while x + width < CHUNK_SIZE && mask[x + width][y] == Some((block_type, ao_factors)) {
                         width += 1;
                     }
 
                     let mut height = 1;
                     'o: while y + height < CHUNK_SIZE {
                         for dx in 0..width {
-                            if mask[x + dx][y + height] != Some(block_type) {
+                            if mask[x + dx][y + height] != Some((block_type, ao_factors)) {
                                 break 'o;
                             }
                         }
@@ -348,28 +362,28 @@ pub fn build_chunk_mesh(
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[0],
                         normal: [0.0, 0.0, -1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by - 0.5, bz - 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[1],
                         normal: [0.0, 0.0, -1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by + height as f32 - 0.5, bz - 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[2],
                         normal: [0.0, 0.0, -1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + height as f32 - 0.5, bz - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[3],
                         normal: [0.0, 0.0, -1.0],
                     });
 
@@ -394,7 +408,7 @@ pub fn build_chunk_mesh(
 
     // --- 前面 (+Z) のグリーディメッシュ ---
     for z in 0..CHUNK_SIZE {
-        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
@@ -404,23 +418,27 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi, zi + 1, blocks) {
                     let index = Chunk::index(x, y, z);
-                    mask[x][y] = Some(blocks[index]);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi, yi - 1, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi, yi + 1, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    mask[x][y] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
         }
 
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                if let Some(block_type) = mask[x][y] {
+                if let Some((block_type, ao_factors)) = mask[x][y] {
                     let mut width = 1;
-                    while x + width < CHUNK_SIZE && mask[x + width][y] == Some(block_type) {
+                    while x + width < CHUNK_SIZE && mask[x + width][y] == Some((block_type, ao_factors)) {
                         width += 1;
                     }
 
                     let mut height = 1;
                     'o: while y + height < CHUNK_SIZE {
                         for dx in 0..width {
-                            if mask[x + dx][y + height] != Some(block_type) {
+                            if mask[x + dx][y + height] != Some((block_type, ao_factors)) {
                                 break 'o;
                             }
                         }
@@ -438,28 +456,28 @@ pub fn build_chunk_mesh(
                         position: [bx - 0.5, by - 0.5, bz + 0.5],
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[0],
                         normal: [0.0, 0.0, 1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by - 0.5, bz + 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[1],
                         normal: [0.0, 0.0, 1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by + height as f32 - 0.5, bz + 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[2],
                         normal: [0.0, 0.0, 1.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + height as f32 - 0.5, bz + 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[3],
                         normal: [0.0, 0.0, 1.0],
                     });
 
@@ -484,7 +502,7 @@ pub fn build_chunk_mesh(
 
     // --- 左面 (-X) のグリーディメッシュ ---
     for x in 0..CHUNK_SIZE {
-        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
         for z in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
@@ -494,23 +512,27 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi - 1, yi, zi, blocks) {
                     let index = Chunk::index(x, y, z);
-                    mask[z][y] = Some(blocks[index]);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi - 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi - 1, yi, zi - 1, blocks), is_solid(xi - 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi + 1, zi, blocks), is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi - 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi - 1, yi - 1, zi, blocks), is_solid(xi - 1, yi, zi + 1, blocks), is_solid(xi - 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    mask[z][y] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
         }
 
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
-                if let Some(block_type) = mask[z][y] {
+                if let Some((block_type, ao_factors)) = mask[z][y] {
                     let mut width = 1;
-                    while z + width < CHUNK_SIZE && mask[z + width][y] == Some(block_type) {
+                    while z + width < CHUNK_SIZE && mask[z + width][y] == Some((block_type, ao_factors)) {
                         width += 1;
                     }
 
                     let mut height = 1;
                     'o: while y + height < CHUNK_SIZE {
                         for dz in 0..width {
-                            if mask[z + dz][y + height] != Some(block_type) {
+                            if mask[z + dz][y + height] != Some((block_type, ao_factors)) {
                                 break 'o;
                             }
                         }
@@ -528,28 +550,28 @@ pub fn build_chunk_mesh(
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[0],
                         normal: [-1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + height as f32 - 0.5, bz - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[1],
                         normal: [-1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + height as f32 - 0.5, bz + width as f32 - 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[2],
                         normal: [-1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz + width as f32 - 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[3],
                         normal: [-1.0, 0.0, 0.0],
                     });
 
@@ -574,7 +596,7 @@ pub fn build_chunk_mesh(
 
     // --- 右面 (+X) のグリーディメッシュ ---
     for x in 0..CHUNK_SIZE {
-        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
         for z in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
@@ -584,23 +606,27 @@ pub fn build_chunk_mesh(
 
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi + 1, yi, zi, blocks) {
                     let index = Chunk::index(x, y, z);
-                    mask[z][y] = Some(blocks[index]);
+                    let f0 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi + 1, yi - 1, zi - 1, blocks)) as f32 / 3.0);
+                    let f1 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi - 1, zi, blocks), is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi + 1, yi - 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f2 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi + 1, yi, zi + 1, blocks), is_solid(xi + 1, yi + 1, zi + 1, blocks)) as f32 / 3.0);
+                    let f3 = 0.25 + 0.75 * (calc_ao(is_solid(xi + 1, yi + 1, zi, blocks), is_solid(xi + 1, yi, zi - 1, blocks), is_solid(xi + 1, yi + 1, zi - 1, blocks)) as f32 / 3.0);
+                    mask[z][y] = Some((blocks[index], [f0, f1, f2, f3]));
                 }
             }
         }
 
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
-                if let Some(block_type) = mask[z][y] {
+                if let Some((block_type, ao_factors)) = mask[z][y] {
                     let mut width = 1;
-                    while z + width < CHUNK_SIZE && mask[z + width][y] == Some(block_type) {
+                    while z + width < CHUNK_SIZE && mask[z + width][y] == Some((block_type, ao_factors)) {
                         width += 1;
                     }
 
                     let mut height = 1;
                     'o: while y + height < CHUNK_SIZE {
                         for dz in 0..width {
-                            if mask[z + dz][y + height] != Some(block_type) {
+                            if mask[z + dz][y + height] != Some((block_type, ao_factors)) {
                                 break 'o;
                             }
                         }
@@ -618,28 +644,28 @@ pub fn build_chunk_mesh(
                         position: [bx + 0.5, by - 0.5, bz - 0.5],
                         tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[0],
                         normal: [1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + 0.5, by - 0.5, bz + width as f32 - 0.5],
                         tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[1],
                         normal: [1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + 0.5, by + height as f32 - 0.5, bz + width as f32 - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[2],
                         normal: [1.0, 0.0, 0.0],
                     });
                     vertices.push(TerrainVertex {
                         position: [bx + 0.5, by + height as f32 - 0.5, bz - 0.5],
                         tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: 1.0,
+                        ao_factor: ao_factors[3],
                         normal: [1.0, 0.0, 0.0],
                     });
 
