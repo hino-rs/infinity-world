@@ -96,7 +96,6 @@ pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
     blocks[index] != BlockType::Air
 }
 
-
 pub fn build_chunk_mesh(
     blocks: &Option<ChunkBlocks>,
     chunk_x: i32,
@@ -111,182 +110,76 @@ pub fn build_chunk_mesh(
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
-
-    // println!("{dist_from_camera}");
-    // if dist_from_camera > (RADIUS as i32) {
-    //     let size = CHUNK_SIZE as f32;
-    //     let ox = (chunk_x * CHUNK_SIZE as i32) as f32 - 0.5;
-    //     let oy = (chunk_y * CHUNK_SIZE as i32) as f32 - 0.5;
-    //     let oz = (chunk_z * CHUNK_SIZE as i32) as f32 - 0.5;
-
-    //     // 上面 (+Y)
-    //     let start_idx = vertices.len() as u32;
-    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz       ], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 1.0 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz       ], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 1.0 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz + size], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 1.0 });
-    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz + size], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 1.0 });
-    //     indices.extend_from_slice(&[start_idx, start_idx + 3, start_idx + 2, start_idx, start_idx + 2, start_idx + 1]);
-
-    //     // 下面 (-Y)
-    //     let start_idx = vertices.len() as u32;
-    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz       ], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 0.5 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz       ], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 0.5 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz + size], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 0.5 });
-    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz + size], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 0.5 });
-    //     indices.extend_from_slice(&[start_idx, start_idx + 1, start_idx + 2, start_idx, start_idx + 2, start_idx + 3]);
-
-    //     // 後面 (-Z)
-    //     let start_idx = vertices.len() as u32;
-    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz       ], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 0.8 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz       ], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 0.8 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz       ], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 0.8 });
-    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz       ], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 0.8 });
-    //     indices.extend_from_slice(&[start_idx, start_idx + 3, start_idx + 2, start_idx, start_idx + 2, start_idx + 1]);
-
-    //     // 前面 (+Z)
-    //     let start_idx = vertices.len() as u32;
-    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz + size], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 0.8 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz + size], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 0.8 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz + size], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 0.8 });
-    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz + size], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 0.8 });
-    //     indices.extend_from_slice(&[start_idx, start_idx + 1, start_idx + 2, start_idx, start_idx + 2, start_idx + 3]);
-
-    //     // 左面 (-X)
-    //     let start_idx = vertices.len() as u32;
-    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz       ], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 0.6 });
-    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz       ], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 0.6 });
-    //     vertices.push(TerrainVertex { position: [ox,        oy + size, oz + size], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 0.6 });
-    //     vertices.push(TerrainVertex { position: [ox,        oy,        oz + size], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 0.6 });
-    //     indices.extend_from_slice(&[start_idx, start_idx + 3, start_idx + 2, start_idx, start_idx + 2, start_idx + 1]);
-
-    //     // 右面 (+X)
-    //     let start_idx = vertices.len() as u32;
-    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz       ], tex_coords: [1.0, 1.0], block_type: 1, ao_factor: 0.6 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy,        oz + size], tex_coords: [0.0, 1.0], block_type: 1, ao_factor: 0.6 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz + size], tex_coords: [0.0, 0.0], block_type: 1, ao_factor: 0.6 });
-    //     vertices.push(TerrainVertex { position: [ox + size, oy + size, oz       ], tex_coords: [1.0, 0.0], block_type: 1, ao_factor: 0.6 });
-    //     indices.extend_from_slice(&[start_idx, start_idx + 3, start_idx + 2, start_idx, start_idx + 2, start_idx + 1]);
-
-    //     return (vertices, indices);
-    // }
-
     // チャンクの左下隅のワールド座標
     let offset_x = (chunk_x * CHUNK_SIZE as i32) as f32;
     let offset_y = (chunk_y * CHUNK_SIZE as i32) as f32;
     let offset_z = (chunk_z * CHUNK_SIZE as i32) as f32;
 
-    for x in 0..CHUNK_SIZE {
-        for y in 0..CHUNK_SIZE {
+    // --- 上面 (+Y) のグリーディメッシュ ---
+    for y in 0..CHUNK_SIZE {
+        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+
+        for x in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
-                let center = IndexVec::<CHUNK_SIZE, CHUNK_SIZE>::new(x, y, z);
-                let index = center.to_index();
-                let block = blocks[index];
-
-                if block == BlockType::Air {
-                    continue;
-                }
-
-                if !(x == 0
-                    || x == CHUNK_SIZE
-                    || y == 0
-                    || y == CHUNK_SIZE
-                    || z == 0
-                    || z == CHUNK_SIZE)
-                {
-                    if index > CHUNK_SIZE && index < NUM_CHUNK_BLOCKS - Y_STRIDE {
-                        let up = blocks[center.up()];
-                        let down = blocks[center.down()];
-                        let left = blocks[center.left()];
-                        let right = blocks[center.right()];
-                        let front = blocks[center.front()];
-                        let back = blocks[center.back()];
-
-                        if up != Air
-                            && up != Water
-                            && down != Air
-                            && down != Water
-                            && left != Air
-                            && left != Water
-                            && right != Air
-                            && right != Water
-                            && front != Air
-                            && front != Water
-                            && back != Air
-                            && back != Water
-                        {
-                            continue;
-                        }
-                    }
-                }
-
-                let block_type_id = block as u32;
-                let bx = x as f32 + offset_x;
-                let by = y as f32 + offset_y;
-                let bz = z as f32 + offset_z;
                 let xi = x as i32;
                 let yi = y as i32;
                 let zi = z as i32;
 
-                // 上面 (+Y)
-                if !is_solid(xi, yi + 1, zi, blocks) {
-                    let start_idx = vertices.len() as u32;
+                if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi + 1, zi, blocks) {
+                    let index = Chunk::index(x, y, z);
+                    mask[x][z] = Some(blocks[index]);
+                }
+            }
+        }
 
-                    let f0 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi + 1, zi, blocks),
-                                is_solid(xi, yi + 1, zi - 1, blocks),
-                                is_solid(xi - 1, yi + 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f1 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi + 1, zi, blocks),
-                                is_solid(xi, yi + 1, zi - 1, blocks),
-                                is_solid(xi + 1, yi + 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f2 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi + 1, zi, blocks),
-                                is_solid(xi, yi + 1, zi + 1, blocks),
-                                is_solid(xi + 1, yi + 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f3 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi + 1, zi, blocks),
-                                is_solid(xi, yi + 1, zi + 1, blocks),
-                                is_solid(xi - 1, yi + 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
+        for z in 0..CHUNK_SIZE {
+            for x in 0..CHUNK_SIZE {
+                if let Some(block_type) = mask[x][z] {
+                    let mut width = 1;
+                    while x + width < CHUNK_SIZE && mask[x + width][z] == Some(block_type) {
+                        width += 1;
+                    }
+
+                    let mut height = 1;
+                    'o: while z + height < CHUNK_SIZE {
+                        for dx in 0..width {
+                            if mask[x + dx][z + height] != Some(block_type) {
+                                break 'o;
+                            }
+                        }
+                        height += 1;
+                    }
+
+                    let block_type_id = block_type as u32;
+                    let bx = x as f32 + offset_x;
+                    let by = y as f32 + offset_y;
+                    let bz = z as f32 + offset_z;
+
+                    let start_idx = vertices.len() as u32;
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + 0.5, bz - 0.5],
-                        tex_coords: [0.0, 1.0],
+                        tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f0,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by + 0.5, bz - 0.5],
-                        tex_coords: [1.0, 1.0],
+                        position: [bx + width as f32 - 0.5, by + 0.5, bz - 0.5],
+                        tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f1,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by + 0.5, bz + 0.5],
-                        tex_coords: [1.0, 0.0],
+                        position: [bx + width as f32 - 0.5, by + 0.5, bz + height as f32 - 0.5],
+                        tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f2,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx - 0.5, by + 0.5, bz + 0.5],
+                        position: [bx - 0.5, by + 0.5, bz + height as f32 - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f3,
+                        ao_factor: 1.0,
                     });
 
                     indices.extend_from_slice(&[
@@ -297,68 +190,82 @@ pub fn build_chunk_mesh(
                         start_idx + 2,
                         start_idx + 1,
                     ]);
+
+                    for dy in 0..height {
+                        for dx in 0..width {
+                            mask[x + dx][z + dy] = None;
+                        }
+                    }
                 }
+            }
+        }
+    }
 
-                // 下面 (-Y)
-                if !is_solid(xi, yi - 1, zi, blocks) {
+    // --- 下面 (-Y) のグリーディメッシュ ---
+    for y in 0..CHUNK_SIZE {
+        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+
+        for x in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                let xi = x as i32;
+                let yi = y as i32;
+                let zi = z as i32;
+
+                if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi - 1, zi, blocks) {
+                    let index = Chunk::index(x, y, z);
+                    mask[x][z] = Some(blocks[index]);
+                }
+            }
+        }
+
+        for z in 0..CHUNK_SIZE {
+            for x in 0..CHUNK_SIZE {
+                if let Some(block_type) = mask[x][z] {
+                    let mut width = 1;
+                    while x + width < CHUNK_SIZE && mask[x + width][z] == Some(block_type) {
+                        width += 1;
+                    }
+
+                    let mut height = 1;
+                    'o: while z + height < CHUNK_SIZE {
+                        for dx in 0..width {
+                            if mask[x + dx][z + height] != Some(block_type) {
+                                break 'o;
+                            }
+                        }
+                        height += 1;
+                    }
+
+                    let block_type_id = block_type as u32;
+                    let bx = x as f32 + offset_x;
+                    let by = y as f32 + offset_y;
+                    let bz = z as f32 + offset_z;
+
                     let start_idx = vertices.len() as u32;
-
-                    let f0 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi - 1, zi, blocks),
-                                is_solid(xi, yi - 1, zi - 1, blocks),
-                                is_solid(xi - 1, yi - 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f1 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi - 1, zi, blocks),
-                                is_solid(xi, yi - 1, zi - 1, blocks),
-                                is_solid(xi + 1, yi - 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f2 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi - 1, zi, blocks),
-                                is_solid(xi, yi - 1, zi + 1, blocks),
-                                is_solid(xi + 1, yi - 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f3 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi - 1, zi, blocks),
-                                is_solid(xi, yi - 1, zi + 1, blocks),
-                                is_solid(xi - 1, yi - 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f0,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by - 0.5, bz - 0.5],
-                        tex_coords: [1.0, 0.0],
+                        position: [bx + width as f32 - 0.5, by - 0.5, bz - 0.5],
+                        tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f1,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by - 0.5, bz + 0.5],
-                        tex_coords: [1.0, 1.0],
+                        position: [bx + width as f32 - 0.5, by - 0.5, bz + height as f32 - 0.5],
+                        tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f2,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx - 0.5, by - 0.5, bz + 0.5],
-                        tex_coords: [0.0, 1.0],
+                        position: [bx - 0.5, by - 0.5, bz + height as f32 - 0.5],
+                        tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f3,
+                        ao_factor: 1.0,
                     });
 
                     indices.extend_from_slice(&[
@@ -369,68 +276,82 @@ pub fn build_chunk_mesh(
                         start_idx + 2,
                         start_idx + 3,
                     ]);
+
+                    for dy in 0..height {
+                        for dx in 0..width {
+                            mask[x + dx][z + dy] = None;
+                        }
+                    }
                 }
+            }
+        }
+    }
 
-                // 後ろ面 (-Z)
-                if !is_solid(xi, yi, zi - 1, blocks) {
+    // --- 後ろ面 (-Z) のグリーディメッシュ ---
+    for z in 0..CHUNK_SIZE {
+        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                let xi = x as i32;
+                let yi = y as i32;
+                let zi = z as i32;
+
+                if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi, zi - 1, blocks) {
+                    let index = Chunk::index(x, y, z);
+                    mask[x][y] = Some(blocks[index]);
+                }
+            }
+        }
+
+        for y in 0..CHUNK_SIZE {
+            for x in 0..CHUNK_SIZE {
+                if let Some(block_type) = mask[x][y] {
+                    let mut width = 1;
+                    while x + width < CHUNK_SIZE && mask[x + width][y] == Some(block_type) {
+                        width += 1;
+                    }
+
+                    let mut height = 1;
+                    'o: while y + height < CHUNK_SIZE {
+                        for dx in 0..width {
+                            if mask[x + dx][y + height] != Some(block_type) {
+                                break 'o;
+                            }
+                        }
+                        height += 1;
+                    }
+
+                    let block_type_id = block_type as u32;
+                    let bx = x as f32 + offset_x;
+                    let by = y as f32 + offset_y;
+                    let bz = z as f32 + offset_z;
+
                     let start_idx = vertices.len() as u32;
-
-                    let f0 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi, zi - 1, blocks),
-                                is_solid(xi, yi - 1, zi - 1, blocks),
-                                is_solid(xi - 1, yi - 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f1 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi, zi - 1, blocks),
-                                is_solid(xi, yi - 1, zi - 1, blocks),
-                                is_solid(xi + 1, yi - 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f2 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi, zi - 1, blocks),
-                                is_solid(xi, yi + 1, zi - 1, blocks),
-                                is_solid(xi + 1, yi + 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f3 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi, zi - 1, blocks),
-                                is_solid(xi, yi + 1, zi - 1, blocks),
-                                is_solid(xi - 1, yi + 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
-                        tex_coords: [0.0, 1.0],
+                        tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f0,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by - 0.5, bz - 0.5],
-                        tex_coords: [1.0, 1.0],
+                        position: [bx + width as f32 - 0.5, by - 0.5, bz - 0.5],
+                        tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f1,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by + 0.5, bz - 0.5],
-                        tex_coords: [1.0, 0.0],
+                        position: [bx + width as f32 - 0.5, by + height as f32 - 0.5, bz - 0.5],
+                        tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f2,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx - 0.5, by + 0.5, bz - 0.5],
+                        position: [bx - 0.5, by + height as f32 - 0.5, bz - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f3,
+                        ao_factor: 1.0,
                     });
 
                     indices.extend_from_slice(&[
@@ -441,68 +362,82 @@ pub fn build_chunk_mesh(
                         start_idx + 2,
                         start_idx + 1,
                     ]);
+
+                    for dy in 0..height {
+                        for dx in 0..width {
+                            mask[x + dx][y + dy] = None;
+                        }
+                    }
                 }
+            }
+        }
+    }
 
-                // 前面 (+Z)
-                if !is_solid(xi, yi, zi + 1, blocks) {
+    // --- 前面 (+Z) のグリーディメッシュ ---
+    for z in 0..CHUNK_SIZE {
+        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                let xi = x as i32;
+                let yi = y as i32;
+                let zi = z as i32;
+
+                if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi, zi + 1, blocks) {
+                    let index = Chunk::index(x, y, z);
+                    mask[x][y] = Some(blocks[index]);
+                }
+            }
+        }
+
+        for y in 0..CHUNK_SIZE {
+            for x in 0..CHUNK_SIZE {
+                if let Some(block_type) = mask[x][y] {
+                    let mut width = 1;
+                    while x + width < CHUNK_SIZE && mask[x + width][y] == Some(block_type) {
+                        width += 1;
+                    }
+
+                    let mut height = 1;
+                    'o: while y + height < CHUNK_SIZE {
+                        for dx in 0..width {
+                            if mask[x + dx][y + height] != Some(block_type) {
+                                break 'o;
+                            }
+                        }
+                        height += 1;
+                    }
+
+                    let block_type_id = block_type as u32;
+                    let bx = x as f32 + offset_x;
+                    let by = y as f32 + offset_y;
+                    let bz = z as f32 + offset_z;
+
                     let start_idx = vertices.len() as u32;
-
-                    let f0 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi, zi + 1, blocks),
-                                is_solid(xi, yi - 1, zi + 1, blocks),
-                                is_solid(xi - 1, yi - 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f1 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi, zi + 1, blocks),
-                                is_solid(xi, yi - 1, zi + 1, blocks),
-                                is_solid(xi + 1, yi - 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f2 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi, zi + 1, blocks),
-                                is_solid(xi, yi + 1, zi + 1, blocks),
-                                is_solid(xi + 1, yi + 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f3 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi, zi + 1, blocks),
-                                is_solid(xi, yi + 1, zi + 1, blocks),
-                                is_solid(xi - 1, yi + 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz + 0.5],
-                        tex_coords: [0.0, 1.0],
+                        tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f0,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by - 0.5, bz + 0.5],
-                        tex_coords: [1.0, 1.0],
+                        position: [bx + width as f32 - 0.5, by - 0.5, bz + 0.5],
+                        tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f1,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by + 0.5, bz + 0.5],
-                        tex_coords: [1.0, 0.0],
+                        position: [bx + width as f32 - 0.5, by + height as f32 - 0.5, bz + 0.5],
+                        tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f2,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx - 0.5, by + 0.5, bz + 0.5],
+                        position: [bx - 0.5, by + height as f32 - 0.5, bz + 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f3,
+                        ao_factor: 1.0,
                     });
 
                     indices.extend_from_slice(&[
@@ -513,68 +448,82 @@ pub fn build_chunk_mesh(
                         start_idx + 2,
                         start_idx + 3,
                     ]);
+
+                    for dy in 0..height {
+                        for dx in 0..width {
+                            mask[x + dx][y + dy] = None;
+                        }
+                    }
                 }
+            }
+        }
+    }
 
-                // 左面 (-X)
-                if !is_solid(xi - 1, yi, zi, blocks) {
+    // --- 左面 (-X) のグリーディメッシュ ---
+    for x in 0..CHUNK_SIZE {
+        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+
+        for z in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                let xi = x as i32;
+                let yi = y as i32;
+                let zi = z as i32;
+
+                if is_solid(xi, yi, zi, blocks) && !is_solid(xi - 1, yi, zi, blocks) {
+                    let index = Chunk::index(x, y, z);
+                    mask[z][y] = Some(blocks[index]);
+                }
+            }
+        }
+
+        for y in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                if let Some(block_type) = mask[z][y] {
+                    let mut width = 1;
+                    while z + width < CHUNK_SIZE && mask[z + width][y] == Some(block_type) {
+                        width += 1;
+                    }
+
+                    let mut height = 1;
+                    'o: while y + height < CHUNK_SIZE {
+                        for dz in 0..width {
+                            if mask[z + dz][y + height] != Some(block_type) {
+                                break 'o;
+                            }
+                        }
+                        height += 1;
+                    }
+
+                    let block_type_id = block_type as u32;
+                    let bx = x as f32 + offset_x;
+                    let by = y as f32 + offset_y;
+                    let bz = z as f32 + offset_z;
+
                     let start_idx = vertices.len() as u32;
-
-                    let f0 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi - 1, zi, blocks),
-                                is_solid(xi - 1, yi, zi - 1, blocks),
-                                is_solid(xi - 1, yi - 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f1 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi + 1, zi, blocks),
-                                is_solid(xi - 1, yi, zi - 1, blocks),
-                                is_solid(xi - 1, yi + 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f2 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi + 1, zi, blocks),
-                                is_solid(xi - 1, yi, zi + 1, blocks),
-                                is_solid(xi - 1, yi + 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f3 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi - 1, yi - 1, zi, blocks),
-                                is_solid(xi - 1, yi, zi + 1, blocks),
-                                is_solid(xi - 1, yi - 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by - 0.5, bz - 0.5],
-                        tex_coords: [0.0, 1.0],
+                        tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f0,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx - 0.5, by + 0.5, bz - 0.5],
+                        position: [bx - 0.5, by + height as f32 - 0.5, bz - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f1,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx - 0.5, by + 0.5, bz + 0.5],
-                        tex_coords: [1.0, 0.0],
+                        position: [bx - 0.5, by + height as f32 - 0.5, bz + width as f32 - 0.5],
+                        tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f2,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx - 0.5, by - 0.5, bz + 0.5],
-                        tex_coords: [1.0, 1.0],
+                        position: [bx - 0.5, by - 0.5, bz + width as f32 - 0.5],
+                        tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f3,
+                        ao_factor: 1.0,
                     });
 
                     indices.extend_from_slice(&[
@@ -585,68 +534,82 @@ pub fn build_chunk_mesh(
                         start_idx + 2,
                         start_idx + 1,
                     ]);
+
+                    for dy in 0..height {
+                        for dz in 0..width {
+                            mask[z + dz][y + dy] = None;
+                        }
+                    }
                 }
+            }
+        }
+    }
 
-                // 右面 (+X)
-                if !is_solid(xi + 1, yi, zi, blocks) {
+    // --- 右面 (+X) のグリーディメッシュ ---
+    for x in 0..CHUNK_SIZE {
+        let mut mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
+
+        for z in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                let xi = x as i32;
+                let yi = y as i32;
+                let zi = z as i32;
+
+                if is_solid(xi, yi, zi, blocks) && !is_solid(xi + 1, yi, zi, blocks) {
+                    let index = Chunk::index(x, y, z);
+                    mask[z][y] = Some(blocks[index]);
+                }
+            }
+        }
+
+        for y in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                if let Some(block_type) = mask[z][y] {
+                    let mut width = 1;
+                    while z + width < CHUNK_SIZE && mask[z + width][y] == Some(block_type) {
+                        width += 1;
+                    }
+
+                    let mut height = 1;
+                    'o: while y + height < CHUNK_SIZE {
+                        for dz in 0..width {
+                            if mask[z + dz][y + height] != Some(block_type) {
+                                break 'o;
+                            }
+                        }
+                        height += 1;
+                    }
+
+                    let block_type_id = block_type as u32;
+                    let bx = x as f32 + offset_x;
+                    let by = y as f32 + offset_y;
+                    let bz = z as f32 + offset_z;
+
                     let start_idx = vertices.len() as u32;
-
-                    let f0 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi - 1, zi, blocks),
-                                is_solid(xi + 1, yi, zi - 1, blocks),
-                                is_solid(xi + 1, yi - 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f1 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi - 1, zi, blocks),
-                                is_solid(xi + 1, yi, zi + 1, blocks),
-                                is_solid(xi + 1, yi - 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f2 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi + 1, zi, blocks),
-                                is_solid(xi + 1, yi, zi + 1, blocks),
-                                is_solid(xi + 1, yi + 1, zi + 1, blocks),
-                            ) as f32
-                                / 3.0);
-                    let f3 = 0.25
-                        + 0.75
-                            * (calc_ao(
-                                is_solid(xi + 1, yi + 1, zi, blocks),
-                                is_solid(xi + 1, yi, zi - 1, blocks),
-                                is_solid(xi + 1, yi + 1, zi - 1, blocks),
-                            ) as f32
-                                / 3.0);
 
                     vertices.push(TerrainVertex {
                         position: [bx + 0.5, by - 0.5, bz - 0.5],
-                        tex_coords: [1.0, 1.0],
+                        tex_coords: [width as f32, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f0,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by - 0.5, bz + 0.5],
-                        tex_coords: [0.0, 1.0],
+                        position: [bx + 0.5, by - 0.5, bz + width as f32 - 0.5],
+                        tex_coords: [0.0, height as f32],
                         block_type: block_type_id,
-                        ao_factor: f1,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by + 0.5, bz + 0.5],
+                        position: [bx + 0.5, by + height as f32 - 0.5, bz + width as f32 - 0.5],
                         tex_coords: [0.0, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f2,
+                        ao_factor: 1.0,
                     });
                     vertices.push(TerrainVertex {
-                        position: [bx + 0.5, by + 0.5, bz - 0.5],
-                        tex_coords: [1.0, 0.0],
+                        position: [bx + 0.5, by + height as f32 - 0.5, bz - 0.5],
+                        tex_coords: [width as f32, 0.0],
                         block_type: block_type_id,
-                        ao_factor: f3,
+                        ao_factor: 1.0,
                     });
 
                     indices.extend_from_slice(&[
@@ -657,6 +620,12 @@ pub fn build_chunk_mesh(
                         start_idx + 2,
                         start_idx + 1,
                     ]);
+
+                    for dy in 0..height {
+                        for dz in 0..width {
+                            mask[z + dz][y + dy] = None;
+                        }
+                    }
                 }
             }
         }
