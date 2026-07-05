@@ -12,6 +12,7 @@ pub struct World {
     pub camera: Camera,
     pub terrain: Terrain,
     pub seed: u32,
+    pub ticks: u16,
 }
 
 impl World {
@@ -42,6 +43,7 @@ impl World {
             camera,
             terrain,
             seed,
+            ticks: 0,
         }
     }
 
@@ -61,14 +63,16 @@ impl World {
         let player_pos = self.player.position.as_ivec3();
 
         
-        // チャンク生成と掃除
-        self.terrain.add_chunks(device, self.seed, player_pos, storage_layout, &self.camera);
-        // チャンク境界動いたときにで生成・掃除の高速繰り返しが起きないように若干余裕を持たせる
-        if self.terrain.chunks.len() > ((RADIUS*2+3)*(Y_RADIUS*2+3)*(RADIUS*2+3)) as usize {
-            self.terrain.clear_chunks(player_pos);
+        if self.ticks % 2 == 0 {
+            // チャンク生成と掃除
+            self.terrain.add_chunks(device, self.seed, player_pos, storage_layout, &self.camera);
+            // チャンク境界動いたときにで生成・掃除の高速繰り返しが起きないように若干余裕を持たせる
+            if self.terrain.chunks.len() > ((RADIUS*2+3)*(Y_RADIUS*2+3)*(RADIUS*2+3)) as usize {
+                self.terrain.clear_chunks(player_pos);
+            }
         }
         
-
+        self.ticks = self.ticks.wrapping_add_signed(1);
         // println!("{}", self.terrain.chunks.len());
 
         // println!("{:?}", self.terrain.block_at_world(player_pos.x, player_pos.y, player_pos.z));

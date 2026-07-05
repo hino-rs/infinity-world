@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::mpsc;
 
 use glam::{IVec3, Vec3, Vec4};
@@ -97,7 +97,13 @@ impl Terrain {
         let threshold = RADIUS + 1;
 
         while let Ok(result) = self.chunk_rx.try_recv() {
-            let ChunkResult { pos, blocks, compressed, verts, inds } = result;
+            let ChunkResult {
+                pos,
+                blocks,
+                compressed,
+                verts,
+                inds,
+            } = result;
             self.chunk_in_progress.remove(&pos);
 
             let (cx, cy, cz) = pos;
@@ -132,7 +138,7 @@ impl Terrain {
         }
 
         // --- 新規生成が必要なチャンク座標の探索 ---
-        let max_pending = 32;
+        let max_pending = 16;
         if self.chunk_in_progress.len() >= max_pending {
             return;
         }
@@ -140,111 +146,83 @@ impl Terrain {
         let max_to_spawn = max_pending - self.chunk_in_progress.len();
 
         let vp = camera.build_view_projection_matrix(1.0);
-        let mut coords = Vec::new();
 
         let cx = center.x.div_euclid(CHUNK_SIZE as i32);
         let cy = center.y.div_euclid(CHUNK_SIZE as i32);
         let cz = center.z.div_euclid(CHUNK_SIZE as i32);
 
-        'o: for y in (cy - Y_RADIUS..=cy + Y_RADIUS).rev() {
-            if y < 0 {
+        let start_pos = (cx, cy, cz);
+        let mut queue = VecDeque::new();
+        queue.push_back(start_pos);
+        let mut visited = HashSet::new();
+        visited.insert(start_pos);
+
+        let mut coords = Vec::new();
+
+        while let Some(pos) = queue.pop_front() {
+            let (px, py, pz) = pos;
+
+            // 範囲外なら探索をスキップ
+            if (px - cx).abs() > RADIUS
+                || (py - cy).abs() > Y_RADIUS
+                || (px - cz).abs() > RADIUS
+                || py < 0
+            {
                 continue;
             }
-            for z in cz - RADIUS..=cz + RADIUS {
-                for x in cx - RADIUS..=cx + RADIUS {
-                    let min_pos = Vec3::new(
-                        (x * CHUNK_SIZE as i32) as f32,
-                        (y * CHUNK_SIZE as i32) as f32,
-                        (z * CHUNK_SIZE as i32) as f32,
-                    );
-                    let max_pos = min_pos + Vec3::splat(CHUNK_SIZE as f32);
-                    if Camera::is_aabb_in_frustum(min_pos, max_pos, &vp) {
-                        if !self.chunks.contains_key(&(x, y, z)) && !self.chunk_in_progress.contains(&(x, y, z)) {
-                            coords.push((x, y, z));
-                            if coords.len() >= max_to_spawn {
-                                break 'o;
-                            }
-                        }
+
+            // 視野内かつ未生成のチャンクであれば生成対象に追加
+            let min_pos = Vec3::new(
+                (px * CHUNK_SIZE as i32) as f32,
+                (py * CHUNK_SIZE as i32) as f32,
+                (pz * CHUNK_SIZE as i32) as f32,
+            );
+            let max_pos = min_pos + Vec3::splat(CHUNK_SIZE as f32);
+
+            if Camera::is_aabb_in_frustum(min_pos, max_pos, &vp) {
+                if !self.chunks.contains_key(&pos) && !self.chunk_in_progress.contains(&pos) {
+                    coords.push(pos);
+                    if coords.len() >= max_to_spawn {
+                        break;
                     }
                 }
             }
-        }
+            // 隣接する6方向のチャンクをキューに追加
+            for (dx, dy, dz) in &[
+                (1, 0, 0),
+                (-1, 0, 0),
+                (0, 1, 0),
+                (0, -1, 0),
+                (0, 0, 1),
+                (0, 0, -1),
+            ] {
+                let neighbor = (px + dx, py + dy, pz + dz);
+                if visited.insert(neighbor) {
+                    queue.push_back(neighbor);
+                }
+            }
 
-        // --- Rayonでの非同期生成の送信 ---
-        for &(cx, cy, cz) in &coords {
-            self.chunk_in_progress.insert((cx, cy, cz));
-            let tx = self.chunk_tx.clone();
 
-            rayon::spawn(move || {
-                let (blocks, _all_same) = chunk::create_chunk(cx, cy, cz, seed);
-                let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
-                let compressed = chunk::compress(&blocks);
+            // --- Rayonでの非同期生成の送信 ---
+            for &(cx, cy, cz) in &coords {
+                self.chunk_in_progress.insert((cx, cy, cz));
+                let tx = self.chunk_tx.clone();
 
-                let _ = tx.send(ChunkResult {
-                    pos: (cx, cy, cz),
-                    blocks,
-                    compressed,
-                    verts,
-                    inds,
+                rayon::spawn(move || {
+                    let (blocks, _all_same) = chunk::create_chunk(cx, cy, cz, seed);
+                    let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
+                    let compressed = chunk::compress(&blocks);
+
+                    let _ = tx.send(ChunkResult {
+                        pos: (cx, cy, cz),
+                        blocks,
+                        compressed,
+                        verts,
+                        inds,
+                    });
                 });
-            });
+            }
         }
-    
-        // 'o: for y in (cy - Y_RADIUS..=cy + Y_RADIUS).rev() {
-        //     if y < 0 {
-        //         continue;
-        //     }
-        //     for z in cz - RADIUS..=cz + RADIUS {
-        //         for x in cx - RADIUS..=cx + RADIUS {
-        //             let min_pos = Vec3::new(
-        //                 (x * CHUNK_SIZE as i32) as f32,
-        //                 (y * CHUNK_SIZE as i32) as f32,
-        //                 (z * CHUNK_SIZE as i32) as f32,
-        //             );
-        //             let max_pos = min_pos + Vec3::splat(CHUNK_SIZE as f32);
-
-        //             if Camera::is_aabb_in_frustum(min_pos, max_pos, &vp) {
-        //                 if !self.chunks.contains_key(&(x, y, z)) {
-        //                     coords.push((x, y, z));
-        //                     if coords.len() > 2 {
-        //                         break;
-        //                     }
-        //                 }
-        //             }
-
-        //             // if Camera::is_point_in_frustum(Vec3::new((x*CHUNK_SIZE as i32) as f32, (y*CHUNK_SIZE as i32) as f32, (z*CHUNK_SIZE as i32) as f32), &vp) {
-        //             //     println!("{:?}", self.chunks.get(&(x, y, z)));
-        //             //     if !self.chunks.contains_key(&(x, y, z)) {
-        //             //         coords.push((x, y, z));
-        //             //         if coords.len() > 3 {
-        //             //             // break 'o;
-        //             //             break;
-        //             //         }
-        //             //     }
-        //             // }
-        //         }
-        //     }
-        // }
-
-        // if coords.is_empty() {
-        //     return;
-        // }
-
-        // // CPU処理だけ並列化
-        // let cpu_results: Vec<_> = coords
-        //     .par_iter()
-        //     .filter_map(|&(cx, cy, cz)| {
-        //         let (blocks, all_same) = chunk::create_chunk(cx, cy, cz, seed);
-        //         let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
-        //         Some((cx, cy, cz, blocks, all_same, verts, inds))
-        //     })
-        //     .collect();
-
-        // for (cx, cy, cz, blocks, all_same, verts, inds) in cpu_results {
-
-
-
-        // }
     }
 
     // 最初は初期ポジのXZに位置するチャンクだけ作る
@@ -269,7 +247,9 @@ impl Terrain {
                 continue;
             }
             let (blocks, all_air) = chunk::create_chunk(cx, cy, cz, seed);
-            if all_air { continue; }
+            if all_air {
+                continue;
+            }
 
             let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz);
 
@@ -297,13 +277,17 @@ impl Terrain {
                     bind_group,
                 },
             );
-        
         }
 
         let (chunk_tx, chunk_rx) = mpsc::channel();
         let chunk_in_progress = HashSet::new();
 
-        Self { chunks, chunk_rx, chunk_tx, chunk_in_progress }
+        Self {
+            chunks,
+            chunk_rx,
+            chunk_tx,
+            chunk_in_progress,
+        }
     }
 
     // 指定のワールド座標がソリッドか
