@@ -1,7 +1,7 @@
 use std::f32::consts::TAU;
 
 use wgpu::util::DeviceExt;
-use glam::{Mat4, Vec3, Vec4};
+use glam::{Mat4, Vec3};
 
 pub struct Camera {
     pub eye: Vec3,
@@ -10,7 +10,6 @@ pub struct Camera {
     pub aspect: f32,
     pub fovy: f32,
     pub znear: f32,
-    pub zfar: f32,
     pub sensitivity: f32,
 }
 
@@ -71,7 +70,6 @@ impl Camera {
         aspect: f32,
         fovy: f32,
         znear: f32,
-        zfar: f32,
         sensitivity: f32,
     ) -> Self {
         Self {
@@ -81,7 +79,6 @@ impl Camera {
             aspect,
             fovy,
             znear,
-            zfar,
             sensitivity,
         }
     }

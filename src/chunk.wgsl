@@ -1,12 +1,12 @@
 const CHUNK_SIZE_U: u32 = 32;
 const CHUNK_SIZE_I: i32 = i32(CHUNK_SIZE_U);
 const CHUNK_SIZE_F: f32 = f32(CHUNK_SIZE_I);
-const SCALE: f32 = 32.0;
+const SCALE: f32 = 128.0;
 const SEA_LEVEL: i32 = 10;
 const DIRT_DEPTH: i32 = 4;
 
 struct ChunkUniforms {
-    chunk_pos: vec3<i32>,
+    chunk_pos: vec3i,
     seed: i32,
 }
 
@@ -29,10 +29,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let seed = uniforms.seed;
 
     let wx = f32(cx * 32 + i32(x));
-    let wz = f32(cy * 32 + i32(z));
+    let wz = f32(cz * 32 + i32(z));
 
     let r = domain_warp(wx, 0.0, wz, seed);
-    let h = i32(round(r * 16.0 + CHUNK_SIZE_F));
+    let h = i32(round(r * 128.0));
 
     for (var y = 0u; y < CHUNK_SIZE_U; y++) {
         let wy = uniforms.chunk_pos.y * CHUNK_SIZE_I + i32(y);
@@ -79,14 +79,25 @@ fn hash2d(p: vec2f, seed: i32) -> f32 {
 }
 
 fn hash3d(p: vec3f, seed: i32) -> f32 {
-    let offset = vec3f(
-        f32(seed) * 12.9898,
-        f32(seed) * 78.233,
-        f32(seed) * 45.164,
+    let ip = vec3<u32>(
+        u32(i32(floor(p.x))),
+        u32(i32(floor(p.y))),
+        u32(i32(floor(p.z)))
     );
-    var p3 = fract((p + offset) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
+    let s = u32(seed);
+
+    var v = ip ^ vec3<u32>(s);
+    v = v * 1664525u + 1013904223u;
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v ^= v >> vec3<u32>(16u);
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v ^= v >> vec3<u32>(16u);
+
+    return f32(v.x) * (1.0 / 4294967295.0);
 }
 
 // =======================================================

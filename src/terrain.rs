@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::mpsc;
 
-use glam::{IVec3, Vec3, Vec4};
+use glam::{IVec3, Vec3};
 use num_traits::{AsPrimitive, Num};
 use wgpu::util::DeviceExt;
 
@@ -20,8 +20,6 @@ pub struct Chunk {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_indices: u32,
-    pub lod_level: u8,
-    pub storage_buffer: Option<wgpu::Buffer>,
     pub bind_group: Option<wgpu::BindGroup>,
 }
 
@@ -58,18 +56,6 @@ pub struct Terrain {
 }
 
 impl Terrain {
-    // pub fn lod_system(&self, camera_pos: IVec3) {
-    //     let ccx = camera_pos.x.div_euclid(CHUNK_SIZE_I32);
-    //     let ccy = camera_pos.y.div_euclid(CHUNK_SIZE_I32);
-    //     let ccz = camera_pos.z.div_euclid(CHUNK_SIZE_I32);
-    //     let camera_pos = IVec3::new(ccx, ccy, ccz);
-
-    //     for chunk in self.chunks.keys() {
-    //         let dist_from_camera =
-    //             (IVec3::new(chunk.0, chunk.1, chunk.2) - camera_pos).length_squared();
-    //     }
-    // }
-
     pub fn clear_chunks(&mut self, center: IVec3) {
         let cx_player = center.x.div_euclid(CHUNK_SIZE_I32);
         let cy_player = center.y.div_euclid(CHUNK_SIZE_I32);
@@ -96,7 +82,7 @@ impl Terrain {
     pub fn add_chunks(
         &mut self,
         device: &wgpu::Device,
-        seed: u32,
+        seed: i32,
         center: IVec3,
         layout: &wgpu::BindGroupLayout,
         camera: &Camera,
@@ -145,9 +131,7 @@ impl Terrain {
                 blocks: compressed,
                 vertex_buffer,
                 index_buffer,
-                lod_level: 0,
                 num_indices: inds.len() as u32,
-                storage_buffer: None,
                 bind_group,
             });
         }
@@ -223,7 +207,8 @@ impl Terrain {
         for &(cx, cy, cz) in &coords {
             self.chunk_in_progress.insert((cx, cy, cz));
             let tx = self.chunk_tx.clone();
-            compute.update(device, queue, [cx, cy, cz]);
+            
+            compute.update(device, queue, [cx, cy, cz], seed);
             let blocks = compute.get(device);
 
             rayon::spawn(move || {
@@ -243,70 +228,14 @@ impl Terrain {
     }
 
     // 最初は初期ポジのXZに位置するチャンクだけ作る
-    pub fn new(
-        device: &wgpu::Device,
-        seed: u32,
-        initial_position: Vec3,
-        layout: &wgpu::BindGroupLayout,
-        camera_pos: Vec3,
-    ) -> Self {
-        let x = initial_position.x;
-        let y = initial_position.y;
-        let z = initial_position.z;
-
-        let cx = x.div_euclid(CHUNK_SIZE_F32) as i32;
-        let cy = y.div_euclid(CHUNK_SIZE_F32) as i32;
-        let cz = z.div_euclid(CHUNK_SIZE_F32) as i32;
-
-        let mut chunks = HashMap::new();
-
-        // for cy in cy - RADIUS..=cy + RADIUS {
-        //     if cy < 0 {
-        //         continue;
-        //     }
-        //     let (blocks, all_air) = chunk::create_chunk(cx, cy, cz, seed);
-        //     if all_air {
-        //         continue;
-        //     }
-
-        //     let (verts, inds) =
-        //         create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
-
-        //     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //         label: Some("Chunk Vertex Buffer"),
-        //         contents: bytemuck::cast_slice(&verts),
-        //         usage: wgpu::BufferUsages::VERTEX,
-        //     });
-        //     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //         label: Some("Chunk Index Buffer"),
-        //         contents: bytemuck::cast_slice(&inds),
-        //         usage: wgpu::BufferUsages::INDEX,
-        //     });
-
-        //     let (_storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
-
-        //     chunks.insert(
-        //         (cx, cy, cz),
-        //         Chunk {
-        //             blocks: chunk::compress(&blocks),
-        //             vertex_buffer,
-        //             index_buffer,
-        //             lod_level: 0,
-        //             num_indices: inds.len() as u32,
-        //             storage_buffer: None,
-        //             bind_group,
-        //         },
-        //     );
-        // }
-
+    pub fn new() -> Self {
         let (chunk_tx, chunk_rx) = mpsc::channel();
-        let chunk_in_progress = HashSet::new();
 
         Self {
-            chunks,
+            chunks: HashMap::new(),
             chunk_rx,
             chunk_tx,
-            chunk_in_progress,
+            chunk_in_progress: HashSet::new(),
         }
     }
 

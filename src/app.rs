@@ -91,9 +91,7 @@ impl ApplicationHandler for Application {
         let gpu = pollster::block_on(GpuContext::new(Arc::clone(&window)));
         let pipelines = PipelineRegistry::new(&gpu.device, &gpu.config);
         let world = World::new(
-            &gpu.device,
             gpu.config.width as f32 / gpu.config.height as f32,
-            &pipelines.storage_bind_group_layout,
             if self.option.touchpad { 0.03 } else { 0.003 },
         );
         let camera_gpu = CameraGpu::new(
@@ -191,7 +189,7 @@ impl ApplicationHandler for Application {
                     world.update(dt, &gpu.device, &pipelines.storage_bind_group_layout, compute, &gpu.queue);
                     camera_gpu.update(&gpu.queue, &world.camera);
                     let _delta = self.fps.tick();
-                    compute.update(&gpu.device, &gpu.queue, [0, 0, 0]);
+                    compute.update(&gpu.device, &gpu.queue, [0, 0, 0], world.seed);
                     gpu.render(
                         render,
                         pipelines,

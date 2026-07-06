@@ -1,10 +1,9 @@
 use glam::Vec3;
 use wgpu::Queue;
-use std::thread;
 
 use crate::camera::Camera;
 use crate::compute::Compute;
-use crate::consts::{FOV, RADIUS, Y_RADIUS, Z_FAR, Z_NEAR};
+use crate::consts::{FOV, Z_NEAR};
 use crate::player::{Player, PlayerController};
 use crate::terrain::Terrain;
 
@@ -13,18 +12,16 @@ pub struct World {
     pub player_controller: PlayerController,
     pub camera: Camera,
     pub terrain: Terrain,
-    pub seed: u32,
+    pub seed: i32,
     pub ticks: u16,
 }
 
 impl World {
     pub fn new(
-        device: &wgpu::Device, 
         aspect: f32,
-        storage_layout: &wgpu::BindGroupLayout,
         sensitivity: f32,
     ) -> World {
-        let seed = rand::random::<u32>();
+        let seed = rand::random::<i32>();
         let initial_position = Vec3::new(0.0, 100.0, 0.0);
 
         let camera = Camera::new(
@@ -34,11 +31,10 @@ impl World {
             aspect,
             FOV.to_radians(),
             Z_NEAR,
-            Z_FAR,
             sensitivity,
         );
 
-        let terrain = Terrain::new(device, seed, initial_position, storage_layout, camera.eye);
+        let terrain = Terrain::new();
         let player = Player::new(initial_position);        
         let player_controller = PlayerController::default();
 
@@ -68,21 +64,18 @@ impl World {
         let player_pos = self.player.position.as_ivec3();
 
         
-        if self.ticks % 2 == 0 {
-            // チャンク生成
-            self.terrain.add_chunks(device, self.seed, player_pos, storage_layout, &self.camera, compute, queue);
-        }
-
+        
         let prev_player_pos = self.player.current_chunk_pos;
         let current_player_pos = self.player.current_chunk_pos();
+        
+        // チャンク生成
+        self.terrain.add_chunks(device, self.seed, player_pos, storage_layout, &self.camera, compute, queue);
         if prev_player_pos != current_player_pos {
             self.player.current_chunk_pos = current_player_pos;
+            // チャンク掃除
             self.terrain.clear_chunks(player_pos);
         }
         
         self.ticks = self.ticks.wrapping_add_signed(1);
-        // println!("{}", self.terrain.chunks.len());
-
-        // println!("{:?}", self.terrain.block_at_world(player_pos.x, player_pos.y, player_pos.z));
     }
 }

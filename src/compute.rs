@@ -15,7 +15,7 @@ use crate::{consts::{CHUNK_VOLUME, NUM_CHUNK_BLOCKS}, game::BlockType, terrain::
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ChunkUniforms {
     pub chunk_pos: [i32; 3],
-    pub _p: i32,
+    pub seed: i32,
 }
 
 pub struct Compute {
@@ -135,8 +135,6 @@ impl Compute {
             cache: None,
         });
 
-
-
         (
             staging_buffer,
             bind_group,
@@ -147,13 +145,14 @@ impl Compute {
         )
     }
 
-    pub fn update(&self, device: &Device, queue: &Queue, pos: [i32; 3]) {
+    pub fn update(&self, device: &Device, queue: &Queue, pos: [i32; 3], seed: i32) {
+        println!("{pos:?}");
         queue.write_buffer(
             &self.chunkmaker_uniform_buffer, // 保持しているuniform_buffer
             0,
             bytemuck::bytes_of(&ChunkUniforms {
                 chunk_pos: pos,
-                _p: 0,
+                seed,
             }),
         );
 

@@ -40,10 +40,8 @@ pub fn compress(blocks: &Option<Box<ChunkBlocks>>) -> Option<Vec<Rle>> {
             count = 1;
         }
     }
-    if count == blocks.len() as u16 {
-        if prev_block == BlockType::Air {
-            return None;
-        }
+    if count == blocks.len() as u16 && prev_block == BlockType::Air {
+        return None;
     }
     if count > 0 {
         compressed.push(Rle {
@@ -112,10 +110,8 @@ pub fn create_chunk(
                     blocks[index] = BlockType::Air;
                 }
 
-                if index > 1 && all_same {
-                    if blocks[index] != blocks[index - 1] {
-                        all_same = false;
-                    }
+                if index > 1 && all_same && blocks[index] != blocks[index - 1] {
+                    all_same = false;    
                 }
             }
         }
