@@ -21,14 +21,14 @@ pub struct Rle {
 
 /// ブロック情報をRLE形式へ変換する。
 /// ブロックか空だった場合や、すべて空気だった場合はNoneを返す。
-pub fn compress(blocks: &Option<ChunkBlocks>) -> Option<Vec<Rle>> {
+pub fn compress(blocks: &Option<Box<ChunkBlocks>>) -> Option<Vec<Rle>> {
     let Some(blocks) = blocks else {
         return None;
     };
     let mut prev_block = blocks[0];
     let mut count = 0;
     let mut compressed = Vec::new();
-    for block in blocks {
+    for block in blocks.iter() {
         if *block == prev_block {
             count += 1;
         } else {
@@ -74,7 +74,7 @@ pub fn create_chunk(
     chunk_y: i32,
     chunk_z: i32,
     seed: u32,
-) -> (Option<ChunkBlocks>, bool) {
+) -> (Option<Box<ChunkBlocks>>, bool) {
     let mut blocks = [BlockType::Air; NUM_CHUNK_BLOCKS];
     let mut all_same = true;
 
@@ -124,5 +124,5 @@ pub fn create_chunk(
     if all_same {
         return (None, true);
     }
-    (Some(blocks), false)
+    (Some(Box::new(blocks)), false)
 }

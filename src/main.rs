@@ -13,6 +13,7 @@ mod render_info;
 mod fps;
 mod utils;
 mod chunk;
+mod compute;
 
 use winit::event_loop::{ControlFlow, EventLoop};
 

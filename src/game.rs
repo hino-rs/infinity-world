@@ -1,6 +1,6 @@
 /// ブロックの種類
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
+#[repr(u32)]
 pub enum BlockType {
     // --- 基本: 0~ ---
     Air       = 0,

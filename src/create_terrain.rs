@@ -99,7 +99,7 @@ type Mask = [[Option<(BlockType, [f32; 4])>; CHUNK_SIZE]; CHUNK_SIZE];
 
 /// ブロック配列からAO付きグリーディメッシュを作る。
 pub fn build_chunk_mesh(
-    blocks: &Option<ChunkBlocks>,
+    blocks: &Option<Box<ChunkBlocks>>,
     chunk_x: i32,
     chunk_y: i32,
     chunk_z: i32,

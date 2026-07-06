@@ -7,6 +7,7 @@ use wgpu::util::DeviceExt;
 
 use crate::camera::Camera;
 use crate::chunk::Rle;
+use crate::compute::Compute;
 use crate::game::BlockType::Air;
 use crate::{chunk, create_terrain};
 use crate::{consts::*, game::BlockType, player::Aabb};
@@ -40,7 +41,7 @@ type Chunks = HashMap<ChunkPos, Chunk>;
 
 pub struct ChunkResult {
     pub pos: ChunkPos,
-    pub blocks: Option<ChunkBlocks>,
+    pub blocks: Option<Box<ChunkBlocks>>,
     pub compressed: Option<Vec<Rle>>,
     pub verts: Vec<crate::create_terrain::TerrainVertex>,
     pub inds: Vec<u32>,
@@ -57,17 +58,17 @@ pub struct Terrain {
 }
 
 impl Terrain {
-    pub fn lod_system(&self, camera_pos: IVec3) {
-        let ccx = camera_pos.x.div_euclid(CHUNK_SIZE_I32);
-        let ccy = camera_pos.y.div_euclid(CHUNK_SIZE_I32);
-        let ccz = camera_pos.z.div_euclid(CHUNK_SIZE_I32);
-        let camera_pos = IVec3::new(ccx, ccy, ccz);
+    // pub fn lod_system(&self, camera_pos: IVec3) {
+    //     let ccx = camera_pos.x.div_euclid(CHUNK_SIZE_I32);
+    //     let ccy = camera_pos.y.div_euclid(CHUNK_SIZE_I32);
+    //     let ccz = camera_pos.z.div_euclid(CHUNK_SIZE_I32);
+    //     let camera_pos = IVec3::new(ccx, ccy, ccz);
 
-        for chunk in self.chunks.keys() {
-            let dist_from_camera =
-                (IVec3::new(chunk.0, chunk.1, chunk.2) - camera_pos).length_squared();
-        }
-    }
+    //     for chunk in self.chunks.keys() {
+    //         let dist_from_camera =
+    //             (IVec3::new(chunk.0, chunk.1, chunk.2) - camera_pos).length_squared();
+    //     }
+    // }
 
     pub fn clear_chunks(&mut self, center: IVec3) {
         let cx_player = center.x.div_euclid(CHUNK_SIZE_I32);
@@ -99,6 +100,8 @@ impl Terrain {
         center: IVec3,
         layout: &wgpu::BindGroupLayout,
         camera: &Camera,
+        compute: &Compute,
+        queue: &wgpu::Queue,
     ) {
         // --- 計算結果の受信とGPUバッファの作成 ---
         let cx_player = center.x.div_euclid(CHUNK_SIZE_I32);
@@ -164,14 +167,14 @@ impl Terrain {
         let cz = center.z.div_euclid(CHUNK_SIZE_I32);
 
         let start_pos = (cx, cy, cz);
-        let mut queue = VecDeque::new();
-        queue.push_back(start_pos);
+        let mut gen_queue = VecDeque::new();
+        gen_queue.push_back(start_pos);
         let mut visited = HashSet::new();
         visited.insert(start_pos);
 
         let mut coords = Vec::new();
 
-        while let Some(pos) = queue.pop_front() {
+        while let Some(pos) = gen_queue.pop_front() {
             let (px, py, pz) = pos;
 
             // 範囲外なら探索をスキップ
@@ -210,18 +213,20 @@ impl Terrain {
             ] {
                 let neighbor = (px + dx, py + dy, pz + dz);
                 if visited.insert(neighbor) {
-                    queue.push_back(neighbor);
+                    gen_queue.push_back(neighbor);
                 }
             }
         }
         let camera_pos = camera.eye;
+        
         // --- Rayonでの非同期生成の送信 ---
         for &(cx, cy, cz) in &coords {
             self.chunk_in_progress.insert((cx, cy, cz));
             let tx = self.chunk_tx.clone();
+            compute.update(device, queue, [cx, cy, cz]);
+            let blocks = compute.get(device);
 
             rayon::spawn(move || {
-                let (blocks, _all_same) = chunk::create_chunk(cx, cy, cz, seed);
                 let (verts, inds) =
                     create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
                 let compressed = chunk::compress(&blocks);
@@ -255,44 +260,44 @@ impl Terrain {
 
         let mut chunks = HashMap::new();
 
-        for cy in cy - RADIUS..=cy + RADIUS {
-            if cy < 0 {
-                continue;
-            }
-            let (blocks, all_air) = chunk::create_chunk(cx, cy, cz, seed);
-            if all_air {
-                continue;
-            }
+        // for cy in cy - RADIUS..=cy + RADIUS {
+        //     if cy < 0 {
+        //         continue;
+        //     }
+        //     let (blocks, all_air) = chunk::create_chunk(cx, cy, cz, seed);
+        //     if all_air {
+        //         continue;
+        //     }
 
-            let (verts, inds) =
-                create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
+        //     let (verts, inds) =
+        //         create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
 
-            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Chunk Vertex Buffer"),
-                contents: bytemuck::cast_slice(&verts),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Chunk Index Buffer"),
-                contents: bytemuck::cast_slice(&inds),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        //     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //         label: Some("Chunk Vertex Buffer"),
+        //         contents: bytemuck::cast_slice(&verts),
+        //         usage: wgpu::BufferUsages::VERTEX,
+        //     });
+        //     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //         label: Some("Chunk Index Buffer"),
+        //         contents: bytemuck::cast_slice(&inds),
+        //         usage: wgpu::BufferUsages::INDEX,
+        //     });
 
-            let (_storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
+        //     let (_storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
 
-            chunks.insert(
-                (cx, cy, cz),
-                Chunk {
-                    blocks: chunk::compress(&blocks),
-                    vertex_buffer,
-                    index_buffer,
-                    lod_level: 0,
-                    num_indices: inds.len() as u32,
-                    storage_buffer: None,
-                    bind_group,
-                },
-            );
-        }
+        //     chunks.insert(
+        //         (cx, cy, cz),
+        //         Chunk {
+        //             blocks: chunk::compress(&blocks),
+        //             vertex_buffer,
+        //             index_buffer,
+        //             lod_level: 0,
+        //             num_indices: inds.len() as u32,
+        //             storage_buffer: None,
+        //             bind_group,
+        //         },
+        //     );
+        // }
 
         let (chunk_tx, chunk_rx) = mpsc::channel();
         let chunk_in_progress = HashSet::new();
@@ -398,9 +403,9 @@ impl Terrain {
 fn create_chunk_storage(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
-    blocks: &Option<ChunkBlocks>,
+    blocks: &Option<Box<ChunkBlocks>>,
 ) -> (Option<wgpu::Buffer>, Option<wgpu::BindGroup>) {
-    let Some(blocks) = *blocks else {
+    let Some(blocks) = blocks else {
         return (None, None);
     };
 

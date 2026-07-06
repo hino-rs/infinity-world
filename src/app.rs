@@ -9,6 +9,7 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
 use crate::camera::CameraGpu;
+use crate::compute::Compute;
 use crate::fps::FpsCounter;
 use crate::gpu::GpuContext;
 use crate::pipeline::PipelineRegistry;
@@ -40,6 +41,7 @@ pub struct Application {
     pub now: Instant,
     pub frames: u128,
     option: AppOption,
+    pub compute: Option<Compute>,
 }
 
 impl Application {
@@ -58,6 +60,7 @@ impl Application {
             now: Instant::now(),
             frames: 0,
             option,
+            compute: None,
         }
     }
 }
@@ -105,6 +108,8 @@ impl ApplicationHandler for Application {
             gpu.config.height,
             gpu.config.format,
         );
+        
+        let compute = Compute::build(&gpu.device);
 
         self.window = Some(window);
         self.gpu = Some(gpu);
@@ -113,6 +118,7 @@ impl ApplicationHandler for Application {
         self.camera_gpu = Some(camera_gpu);
         self.render = Some(render);
         self.brush = Some(brush);
+        self.compute = Some(compute);
     }
 
     fn window_event(
@@ -169,6 +175,7 @@ impl ApplicationHandler for Application {
                     Some(pipelines),
                     Some(render),
                     Some(brush),
+                    Some(compute),
                 ) = (
                     &mut self.window,
                     &mut self.world,
@@ -177,12 +184,14 @@ impl ApplicationHandler for Application {
                     &self.pipelines,
                     &self.render,
                     &mut self.brush,
+                    &self.compute,
                 ) {
                     let time = Instant::now().duration_since(self.time).as_secs_f32();
                     pipelines.update_general_uniform(&gpu.queue, time);
-                    world.update(dt, &gpu.device, &pipelines.storage_bind_group_layout);
+                    world.update(dt, &gpu.device, &pipelines.storage_bind_group_layout, compute, &gpu.queue);
                     camera_gpu.update(&gpu.queue, &world.camera);
                     let _delta = self.fps.tick();
+                    compute.update(&gpu.device, &gpu.queue, [0, 0, 0]);
                     gpu.render(
                         render,
                         pipelines,

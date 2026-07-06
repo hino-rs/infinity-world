@@ -1,7 +1,9 @@
 use glam::Vec3;
+use wgpu::Queue;
 use std::thread;
 
 use crate::camera::Camera;
+use crate::compute::Compute;
 use crate::consts::{FOV, RADIUS, Y_RADIUS, Z_FAR, Z_NEAR};
 use crate::player::{Player, PlayerController};
 use crate::terrain::Terrain;
@@ -50,7 +52,7 @@ impl World {
         }
     }
 
-    pub fn update(&mut self, dt: f32, device: &wgpu::Device, storage_layout: &wgpu::BindGroupLayout) {
+    pub fn update(&mut self, dt: f32, device: &wgpu::Device, storage_layout: &wgpu::BindGroupLayout, compute: &Compute, queue: &Queue) {
         // このフレームの希望移動量を計算 コントローラーは前フレームのon_groundを参照する
         let delta = self.player_controller.compute_move(&mut self.player, &self.camera, dt);
         
@@ -68,7 +70,7 @@ impl World {
         
         if self.ticks % 2 == 0 {
             // チャンク生成
-            self.terrain.add_chunks(device, self.seed, player_pos, storage_layout, &self.camera);
+            self.terrain.add_chunks(device, self.seed, player_pos, storage_layout, &self.camera, compute, queue);
         }
 
         let prev_player_pos = self.player.current_chunk_pos;
