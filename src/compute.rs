@@ -146,7 +146,6 @@ impl Compute {
     }
 
     pub fn update(&self, device: &Device, queue: &Queue, pos: [i32; 3], seed: i32) {
-        println!("{pos:?}");
         queue.write_buffer(
             &self.chunkmaker_uniform_buffer, // 保持しているuniform_buffer
             0,

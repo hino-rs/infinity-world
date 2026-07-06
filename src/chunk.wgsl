@@ -1,7 +1,8 @@
 const CHUNK_SIZE_U: u32 = 32;
 const CHUNK_SIZE_I: i32 = i32(CHUNK_SIZE_U);
 const CHUNK_SIZE_F: f32 = f32(CHUNK_SIZE_I);
-const SCALE: f32 = 128.0;
+const SCALE: f32 = 512.0;
+const MOUNTAIN_HEIGHT: f32 = 256.0;
 const SEA_LEVEL: i32 = 10;
 const DIRT_DEPTH: i32 = 4;
 
@@ -32,7 +33,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let wz = f32(cz * 32 + i32(z));
 
     let r = domain_warp(wx, 0.0, wz, seed);
-    let h = i32(round(r * 128.0));
+    let h = i32(round(r * MOUNTAIN_HEIGHT));
 
     for (var y = 0u; y < CHUNK_SIZE_U; y++) {
         let wy = uniforms.chunk_pos.y * CHUNK_SIZE_I + i32(y);
@@ -144,6 +145,180 @@ fn value_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     return mix(y0, y1, w);
 }
 
+fn get_grad(p: vec3f, seed: i32) -> vec3f {
+    let h = u32(hash3d(p, seed) * 16.0) & 15u;
+    switch (h) {
+        case 0u:  { return vec3f(1.0, 1.0, 0.0); }
+        case 1u:  { return vec3f(-1.0, 1.0, 0.0); }
+        case 2u:  { return vec3f(1.0, -1.0, 0.0); }
+        case 3u:  { return vec3f(-1.0, -1.0, 0.0); }
+        case 4u:  { return vec3f(1.0, 0.0, 1.0); }
+        case 5u:  { return vec3f(-1.0, 0.0, 1.0); }
+        case 6u:  { return vec3f(1.0, 0.0, -1.0); }
+        case 7u:  { return vec3f(-1.0, 0.0, -1.0); }
+        case 8u:  { return vec3f(0.0, 1.0, 1.0); }
+        case 9u:  { return vec3f(0.0, -1.0, 1.0); }
+        case 10u: { return vec3f(0.0, 1.0, -1.0); }
+        case 11u: { return vec3f(0.0, -1.0, -1.0); }
+        case 12u: { return vec3f(1.0, 1.0, 0.0); }
+        case 13u: { return vec3f(-1.0, 1.0, 0.0); }
+        case 14u: { return vec3f(0.0, -1.0, 1.0); }
+        default:  { return vec3f(0.0, -1.0, -1.0); }
+    }
+}
+
+fn get_cell_point(cell: vec3f, seed: i32) -> vec3f {
+    let x_hash = hash3d(cell, seed);
+    let y_hash = hash3d(cell, seed + 1357);
+    let z_hash = hash3d(cell, seed + 2468);
+    return vec3f(x_hash, y_hash, z_hash);
+}
+
+fn perlin_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+    let p = vec3f(x, y, z);
+    let ip = floor(p);
+    let fp = p - ip;
+
+    let u = fade(fp.x);
+    let v = fade(fp.y);
+    let w = fade(fp.z);
+
+    let g000 = ip + vec3f(0.0, 0.0, 0.0);
+    let g100 = ip + vec3f(1.0, 0.0, 0.0);
+    let g010 = ip + vec3f(0.0, 1.0, 0.0);
+    let g110 = ip + vec3f(1.0, 1.0, 0.0);
+    let g001 = ip + vec3f(0.0, 0.0, 1.0);
+    let g101 = ip + vec3f(1.0, 0.0, 1.0);
+    let g011 = ip + vec3f(0.0, 1.0, 1.0);
+    let g111 = ip + vec3f(1.0, 1.0, 1.0);
+
+    let n000 = dot(get_grad(g000, seed), fp - vec3f(0.0, 0.0, 0.0));
+    let n100 = dot(get_grad(g100, seed), fp - vec3f(1.0, 0.0, 0.0));
+    let n010 = dot(get_grad(g010, seed), fp - vec3f(0.0, 1.0, 0.0));
+    let n110 = dot(get_grad(g110, seed), fp - vec3f(1.0, 1.0, 0.0));
+    let n001 = dot(get_grad(g001, seed), fp - vec3f(0.0, 0.0, 1.0));
+    let n101 = dot(get_grad(g101, seed), fp - vec3f(1.0, 0.0, 1.0));
+    let n011 = dot(get_grad(g011, seed), fp - vec3f(0.0, 1.0, 1.0));
+    let n111 = dot(get_grad(g111, seed), fp - vec3f(1.0, 1.0, 1.0));
+
+    let x00 = mix(n000, n100, u);
+    let x10 = mix(n010, n110, u);
+    let x01 = mix(n001, n101, u);
+    let x11 = mix(n011, n111, u);
+
+    let y0 = mix(x00, x10, v);
+    let y1 = mix(x01, x11, v);
+
+    let val = mix(y0, y1, w);
+    return val * 0.5 + 0.5;
+}
+
+fn simplex_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+    let F3 = 0.333333333;
+    let G3 = 0.166666667;
+
+    let p = vec3f(x, y, z);
+    let s = (p.x + p.y + p.z) * F3;
+    let ips = floor(p + s);
+    let t = (ips.x + ips.y + ips.z) * G3;
+    let p0 = ips - t;
+    let d0 = p - p0;
+
+    var i1: vec3f;
+    var i2: vec3f;
+
+    if (d0.x >= d0.y) {
+        if (d0.y >= d0.z) {
+            i1 = vec3f(1.0, 0.0, 0.0);
+            i2 = vec3f(1.0, 1.0, 0.0);
+        } else if (d0.x >= d0.z) {
+            i1 = vec3f(1.0, 0.0, 0.0);
+            i2 = vec3f(1.0, 0.0, 1.0);
+        } else {
+            i1 = vec3f(0.0, 0.0, 1.0);
+            i2 = vec3f(1.0, 0.0, 1.0);
+        }
+    } else {
+        if (d0.y < d0.z) {
+            i1 = vec3f(0.0, 0.0, 1.0);
+            i2 = vec3f(0.0, 1.0, 1.0);
+        } else if (d0.x >= d0.z) {
+            i1 = vec3f(0.0, 1.0, 0.0);
+            i2 = vec3f(1.0, 1.0, 0.0);
+        } else {
+            i1 = vec3f(0.0, 1.0, 0.0);
+            i2 = vec3f(0.0, 1.0, 1.0);
+        }
+    }
+
+    let d1 = d0 - i1 + G3;
+    let d2 = d0 - i2 + 2.0 * G3;
+    let d3 = d0 - vec3f(1.0, 1.0, 1.0) + 3.0 * G3;
+
+    let g0 = get_grad(ips, seed);
+    let g1 = get_grad(ips + i1, seed);
+    let g2 = get_grad(ips + i2, seed);
+    let g3 = get_grad(ips + vec3f(1.0, 1.0, 1.0), seed);
+
+    var n0 = 0.0;
+    var n1 = 0.0;
+    var n2 = 0.0;
+    var n3 = 0.0;
+
+    let t0 = 0.6 - dot(d0, d0);
+    if (t0 > 0.0) {
+        let t0_2 = t0 * t0;
+        n0 = t0_2 * t0_2 * dot(g0, d0);
+    }
+
+    let t1 = 0.6 - dot(d1, d1);
+    if (t1 > 0.0) {
+        let t1_2 = t1 * t1;
+        n1 = t1_2 * t1_2 * dot(g1, d1);
+    }
+
+    let t2 = 0.6 - dot(d2, d2);
+    if (t2 > 0.0) {
+        let t2_2 = t2 * t2;
+        n2 = t2_2 * t2_2 * dot(g2, d2);
+    }
+
+    let t3 = 0.6 - dot(d3, d3);
+    if (t3 > 0.0) {
+        let t3_2 = t3 * t3;
+        n3 = t3_2 * t3_2 * dot(g3, d3);
+    }
+
+    let val = 32.0 * (n0 + n1 + n2 + n3);
+    return val * 0.5 + 0.5;
+}
+
+fn worley_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+    let p = vec3f(x, y, z);
+    let ip = floor(p);
+    let fp = p - ip;
+
+    var min_dist = 8.0;
+
+    for (var i = -1; i <= 1; i++) {
+        for (var j = -1; j <= 1; j++) {
+            for (var k = -1; k <= 1; k++) {
+                let cell_offset = vec3f(f32(i), f32(j), f32(k));
+                let cell_coord = ip + cell_offset;
+                let point_in_cell = get_cell_point(cell_coord, seed);
+                let r = cell_offset + point_in_cell - fp;
+                let d = dot(r, r);
+                if (d < min_dist) {
+                    min_dist = d;
+                }
+            }
+        }
+    }
+
+    let val = sqrt(min_dist);
+    return clamp(val, 0.0, 1.0);
+}
+
 // =======================================================
 // フラクタル合成
 // =======================================================
@@ -157,12 +332,64 @@ fn fbm(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
     let persistence = 0.5;
 
     for (var i = 0u; i < octaves; i++) {
-        let n = value_noise(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
+        let n = simplex_noise(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
 
         sum += n * amplitude;
         max_val += amplitude;
         amplitude *= persistence;
         frequency *= lacunarity;
+    }
+
+    return sum / max_val;
+}
+
+fn billow(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
+    var sum = 0.0;
+    var amplitude = 0.5;
+    var frequency = 1.0;
+    var max_val = 0.0;
+
+    let lacunarity = 2.0;
+    let persistence = 0.5;
+
+    for (var i = 0u; i < octaves; i++) {
+        let n = value_noise(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
+        let v = abs(n * 2.0 - 1.0);
+        sum += v * amplitude;
+        max_val += amplitude;
+        amplitude *= persistence;
+        frequency *= lacunarity;
+    }
+
+    return sum / max_val;
+}
+
+fn ridged(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
+    var sum = 0.0;
+    var amplitude = 0.5;
+    var frequency = 1.0;
+    var weight = 1.0;
+
+    let lacunarity = 2.0;
+    let persistence = 0.5;
+
+    for (var i = 0u; i < octaves; i++) {
+        let n = value_noise(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
+        var v = 1.0 - abs(n * 2.0 - 1.0);
+        v = v * v;
+        v = v * weight;
+        weight = clamp(v * 2.0, 0.0, 1.0);
+
+        sum += v * amplitude;
+        frequency *= lacunarity;
+        amplitude *= persistence;
+    }
+
+    var max_val = 0.0;
+    var amp = 0.5;
+    for (var i = 0u; i < octaves; i++) {
+        max_val += amp;
+        amp *= persistence;
     }
 
     return sum / max_val;
@@ -183,5 +410,7 @@ fn domain_warp(x: f32, y: f32, z: f32, seed: i32) -> f32 {
 
     let p = vec3f(sx + dx, sy + dy, sz + dz);
 
+    // return fbm(p.x, p.y, p.z, seed + 3, 4);
+    // return billow(p.x, p.y, p.z, seed + 3, 4);
     return fbm(p.x, p.y, p.z, seed + 3, 4);
 }
