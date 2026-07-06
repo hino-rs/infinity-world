@@ -29,6 +29,7 @@ fn main() {
             "full" => option.fullscreen = true,
             "poll" => event_loop.set_control_flow(ControlFlow::Poll),
             "debug" => option.debug = true,
+            "touch" => option.touchpad = true,
             _ => {}
         }
     });

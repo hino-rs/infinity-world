@@ -20,6 +20,7 @@ impl World {
         device: &wgpu::Device, 
         aspect: f32,
         storage_layout: &wgpu::BindGroupLayout,
+        sensitivity: f32,
     ) -> World {
         let seed = rand::random::<u32>();
         let initial_position = Vec3::new(0.0, 100.0, 0.0);
@@ -32,6 +33,7 @@ impl World {
             FOV.to_radians(),
             Z_NEAR,
             Z_FAR,
+            sensitivity,
         );
 
         let terrain = Terrain::new(device, seed, initial_position, storage_layout, camera.eye);

@@ -22,6 +22,7 @@ static FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-VariableFo
 pub struct AppOption {
     pub fullscreen: bool,
     pub debug: bool,
+    pub touchpad: bool,
 }
 
 /// アプリケーション本体
@@ -90,6 +91,7 @@ impl ApplicationHandler for Application {
             &gpu.device,
             gpu.config.width as f32 / gpu.config.height as f32,
             &pipelines.storage_bind_group_layout,
+            if self.option.touchpad { 0.03 } else { 0.003 },
         );
         let camera_gpu = CameraGpu::new(
             &gpu.device,

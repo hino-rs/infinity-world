@@ -72,6 +72,7 @@ impl Camera {
         fovy: f32,
         znear: f32,
         zfar: f32,
+        sensitivity: f32,
     ) -> Self {
         Self {
             eye,
@@ -81,7 +82,7 @@ impl Camera {
             fovy,
             znear,
             zfar,
-            sensitivity: 0.01,
+            sensitivity,
         }
     }
 
