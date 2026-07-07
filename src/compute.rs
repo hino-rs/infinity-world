@@ -1,12 +1,7 @@
 use std::sync::mpsc;
 
 use wgpu::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingType, Buffer, BufferAddress, BufferBindingType, BufferDescriptor,
-    BufferUsages, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device,
-    MapMode, PipelineLayoutDescriptor, PollType, Queue, ShaderModuleDescriptor, ShaderStages,
-    util::{BufferInitDescriptor, DeviceExt},
-    wgt::CommandEncoderDescriptor,
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferAddress, BufferBindingType, BufferDescriptor, BufferUsages, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device, MapMode, PipelineLayoutDescriptor, PollType, Queue, ShaderModuleDescriptor, ShaderSource, ShaderStages, util::{BufferInitDescriptor, DeviceExt}, wgt::CommandEncoderDescriptor,
 };
 
 use crate::{consts::{CHUNK_VOLUME, NUM_CHUNK_BLOCKS}, game::BlockType, terrain::ChunkBlocks};
@@ -21,19 +16,25 @@ pub struct ChunkUniforms {
 pub struct Compute {
     chunkmaker_staging_buffer: Buffer,
     chunkmaker_bind_group: BindGroup,
-    chunkmaker_pipeline: ComputePipeline,
-    chunkmaker_storage_buffer: Buffer,
+    env_pipeline: ComputePipeline,
+    biome_pipeline: ComputePipeline,
+    terrain_pipeline: ComputePipeline,
+    blocks_storage_buffer: Buffer,
+    env_storage_buffer: Buffer,
     chunkmaker_data_size: BufferAddress,
     chunkmaker_uniform_buffer: Buffer,
 }
-
+    
 impl Compute {
     pub fn build(device: &Device) -> Self {
         let (
             chunkmaker_staging_buffer,
             chunkmaker_bind_group,
-            chunkmaker_pipeline,
-            chunkmaker_storage_buffer,
+            env_pipeline,
+            biome_pipeline,
+            terrain_pipeline,
+            blocks_storage_buffer,
+            env_storage_buffer,
             chunkmaker_data_size,
             chunkmaker_uniform_buffer,
         ) = Self::build_chunk_maker(device);
@@ -41,8 +42,11 @@ impl Compute {
         Self {
             chunkmaker_staging_buffer,
             chunkmaker_bind_group,
-            chunkmaker_pipeline,
-            chunkmaker_storage_buffer,
+            env_pipeline,
+            biome_pipeline,
+            terrain_pipeline,
+            blocks_storage_buffer,
+            env_storage_buffer,
             chunkmaker_data_size,
             chunkmaker_uniform_buffer,
         }
@@ -50,12 +54,18 @@ impl Compute {
 
     pub fn build_chunk_maker(
         device: &Device,
-    ) -> (Buffer, BindGroup, ComputePipeline, Buffer, BufferAddress, Buffer) {
+    ) -> (Buffer, BindGroup, ComputePipeline, ComputePipeline, ComputePipeline, Buffer, Buffer, BufferAddress, Buffer) {
         let init_chunk = vec![0; CHUNK_VOLUME];
         let size = (init_chunk.len() * std::mem::size_of::<u32>()) as BufferAddress;
 
-        let storage_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("ChunkMaker Storage Buffer"),
+        let blocks_storage_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Blocks Storage Buffer"),
+            contents: bytemuck::cast_slice(&init_chunk),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+        });
+
+        let env_storage_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Environment Storage Buffer"),
             contents: bytemuck::cast_slice(&init_chunk),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         });
@@ -65,11 +75,6 @@ impl Compute {
             size,
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        });
-
-        let shader = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("ChunkMaker Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("chunk.wgsl").into()),
         });
 
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
@@ -86,7 +91,7 @@ impl Compute {
                     binding: 0,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: false },
+                        ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -96,7 +101,17 @@ impl Compute {
                     binding: 1,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
+                        ty: BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: false },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -111,12 +126,16 @@ impl Compute {
             entries: &[
                 BindGroupEntry {
                     binding: 0,
-                    resource: storage_buffer.as_entire_binding(),
+                    resource: uniform_buffer.as_entire_binding(),
                 },
                 BindGroupEntry {
                     binding: 1,
-                    resource: uniform_buffer.as_entire_binding(),
-                }
+                    resource: blocks_storage_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: env_storage_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -126,10 +145,43 @@ impl Compute {
             immediate_size: 0,
         });
 
-        let compute_pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
-            label: Some("ChunkMaker Compute Pipeline"),
+        let env_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Environment Shader"),
+            source: ShaderSource::Wgsl(include_str!("calc_env.wgsl").into()),
+        });
+
+        let biome_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Biome Shader"),
+            source: ShaderSource::Wgsl(include_str!("biome.wgsl").into()),
+        });
+        
+        let terrain_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Terrain Shader"),
+            source: ShaderSource::Wgsl(include_str!("terrain.wgsl").into()),
+        });
+
+        let env_pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
+            label: Some("Environment Pipeline"),
             layout: Some(&pipeline_layout),
-            module: &shader,
+            module: &env_shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        let biome_pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
+            label: Some("Biome Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &biome_shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        let terrain_pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
+            label: Some("Terrain Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &terrain_shader,
             entry_point: Some("main"),
             compilation_options: Default::default(),
             cache: None,
@@ -138,8 +190,11 @@ impl Compute {
         (
             staging_buffer,
             bind_group,
-            compute_pipeline,
-            storage_buffer,
+            env_pipeline,
+            biome_pipeline,
+            terrain_pipeline,
+            blocks_storage_buffer,
+            env_storage_buffer,
             size,
             uniform_buffer,
         )
@@ -159,20 +214,45 @@ impl Compute {
             label: Some("Compute Command Encoder"),
         });
 
+        // 環境計算
         {
             let mut cp = encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Some("Compute Pass"),
+                label: Some("Environment Pass"),
                 timestamp_writes: None,
             });
 
-            cp.set_pipeline(&self.chunkmaker_pipeline);
+            cp.set_pipeline(&self.env_pipeline);
+            cp.set_bind_group(0, &self.chunkmaker_bind_group, &[]);
+
+            cp.dispatch_workgroups(4, 4, 1);
+        }
+        // // バイオーム計算
+        // {
+        //     let mut cp = encoder.begin_compute_pass(&ComputePassDescriptor {
+        //         label: Some("Biome Pass"),
+        //         timestamp_writes: None,
+        //     });
+
+        //     cp.set_pipeline(&self.biome_pipeline);
+        //     cp.set_bind_group(0, &self.chunkmaker_bind_group, &[]);
+
+        //     cp.dispatch_workgroups(4, 4, 1);
+        // }
+        // 最終的な地形生成
+        {
+            let mut cp = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("Terrain Pass"),
+                timestamp_writes: None,
+            });
+
+            cp.set_pipeline(&self.terrain_pipeline);
             cp.set_bind_group(0, &self.chunkmaker_bind_group, &[]);
 
             cp.dispatch_workgroups(4, 4, 1);
         }
 
         encoder.copy_buffer_to_buffer(
-            &self.chunkmaker_storage_buffer,
+            &self.blocks_storage_buffer,
             0,
             &self.chunkmaker_staging_buffer,
             0,

@@ -11,12 +11,17 @@ struct ChunkUniforms {
     seed: i32,
 }
 
-@group(0) @binding(1) var<uniform> uniforms: ChunkUniforms;
-@group(0) @binding(0) var<storage, read_write> blocks: array<u32>;
+@group(0) @binding(0) var<uniform> uniforms: ChunkUniforms;
+@group(0) @binding(1) var<storage, read_write> blocks: array<u32>;
+@group(0) @binding(2) var<storage, read_write> env_data: array<u32>;
 
+
+// ===================================================================
+// チャンク生成
+// ===================================================================
 @compute
 @workgroup_size(8, 8, 1)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let x = global_id.x;
     let z = global_id.y;
 
@@ -39,17 +44,39 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let wy = uniforms.chunk_pos.y * CHUNK_SIZE_I + i32(y);
         let index = y * (CHUNK_SIZE_U * CHUNK_SIZE_U) + x * CHUNK_SIZE_U + z;
 
+        let env = unpack2x16float(env_data[index]);
+
         if (wy <= h) {
             if wy == h {
                 if h > 45 {
-                    blocks[index] = 1u;
+                    // blocks[index] = 1u;
+                    if env.x < 21.0 {
+                        blocks[index] = 101u;
+                    } else {
+                        blocks[index] = 104u;
+                    }
                 } else {
-                    blocks[index] = 3u;
+                    // blocks[index] = 3u;
+                    if env.x < 21.0 {
+                        blocks[index] = 101u;
+                    } else {
+                        blocks[index] = 104u;
+                    }
                 }
             } else if wy >= h - DIRT_DEPTH {
-                blocks[index] = 2u;
+                // blocks[index] = 2u;
+                if env.x < 21.0 {
+                    blocks[index] = 101u;
+                } else {
+                    blocks[index] = 104u;
+                }
             } else {
-                blocks[index] = 1u;
+                // blocks[index] = 1u;
+                if env.x < 21.0 {
+                    blocks[index] = 101u;
+                } else {
+                    blocks[index] = 104u;
+                }
             }
         } else if wy < SEA_LEVEL {
             blocks[index] = 100u;
@@ -58,6 +85,18 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
     }
 }
+
+// ===================================================================
+// バイオームシステム
+// マインクラフトのようにバイオームの直接的な分布はせず、
+// 気温・湿度・降水量・風量・地質・岩石の性質・地下水・土壌・植生や、
+// 日射量といった要素を分布させ、結果的なバイオームを作りたい。
+// ブロックをそれらに依存させるなら、斜面の傾斜角も考慮したい。
+// ===================================================================
+fn biome(x: f32, y: f32, z: f32, seed: i32) {
+}
+
+
 
 // =======================================================
 // ヘルパー
@@ -80,23 +119,23 @@ fn hash2d(p: vec2f, seed: i32) -> f32 {
 }
 
 fn hash3d(p: vec3f, seed: i32) -> f32 {
-    let ip = vec3<u32>(
+    let ip = vec3u(
         u32(i32(floor(p.x))),
         u32(i32(floor(p.y))),
         u32(i32(floor(p.z)))
     );
     let s = u32(seed);
 
-    var v = ip ^ vec3<u32>(s);
+    var v = ip ^ vec3u(s);
     v = v * 1664525u + 1013904223u;
     v.x += v.y * v.z;
     v.y += v.z * v.x;
     v.z += v.x * v.y;
-    v ^= v >> vec3<u32>(16u);
+    v ^= v >> vec3u(16u);
     v.x += v.y * v.z;
     v.y += v.z * v.x;
     v.z += v.x * v.y;
-    v ^= v >> vec3<u32>(16u);
+    v ^= v >> vec3u(16u);
 
     return f32(v.x) * (1.0 / 4294967295.0);
 }
