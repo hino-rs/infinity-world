@@ -6,11 +6,22 @@ use wgpu::{
 
 use crate::{consts::{CHUNK_VOLUME, NUM_CHUNK_BLOCKS}, game::BlockType, terrain::ChunkBlocks};
 
+pub const BATCH_SIZE: usize = 16;
+
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct ChunkUniforms {
     pub chunk_pos: [i32; 3],
     pub seed: i32,
+}
+
+impl ChunkUniforms {
+    pub fn new(seed: i32) -> Self {
+        Self {
+            chunk_pos: [0, 0, 0],
+            seed,
+        }
+    }
 }
 
 pub struct Compute {
@@ -55,7 +66,7 @@ impl Compute {
     pub fn build_chunk_maker(
         device: &Device,
     ) -> (Buffer, BindGroup, ComputePipeline, ComputePipeline, ComputePipeline, Buffer, Buffer, BufferAddress, Buffer) {
-        let init_chunk = vec![0; CHUNK_VOLUME];
+        let init_chunk = vec![0; CHUNK_VOLUME * BATCH_SIZE];
         let size = (init_chunk.len() * std::mem::size_of::<u32>()) as BufferAddress;
 
         let blocks_storage_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -79,8 +90,8 @@ impl Compute {
 
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("Chunk Uniform Buffer"),
-            size: std::mem::size_of::<ChunkUniforms>() as BufferAddress,
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            size: (std::mem::size_of::<ChunkUniforms>() * BATCH_SIZE) as BufferAddress,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -91,7 +102,7 @@ impl Compute {
                     binding: 0,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
+                        ty: BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -200,14 +211,11 @@ impl Compute {
         )
     }
 
-    pub fn update(&self, device: &Device, queue: &Queue, pos: [i32; 3], seed: i32) {
+    pub fn update(&self, device: &Device, queue: &Queue, uniforms: &[ChunkUniforms]) {
         queue.write_buffer(
             &self.chunkmaker_uniform_buffer, // 保持しているuniform_buffer
             0,
-            bytemuck::bytes_of(&ChunkUniforms {
-                chunk_pos: pos,
-                seed,
-            }),
+            bytemuck::cast_slice(uniforms),
         );
 
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
@@ -224,7 +232,7 @@ impl Compute {
             cp.set_pipeline(&self.env_pipeline);
             cp.set_bind_group(0, &self.chunkmaker_bind_group, &[]);
 
-            cp.dispatch_workgroups(4, 4, 1);
+            cp.dispatch_workgroups(4, 4, BATCH_SIZE as u32);
         }
         // // バイオーム計算
         // {
@@ -248,7 +256,7 @@ impl Compute {
             cp.set_pipeline(&self.terrain_pipeline);
             cp.set_bind_group(0, &self.chunkmaker_bind_group, &[]);
 
-            cp.dispatch_workgroups(4, 4, 1);
+            cp.dispatch_workgroups(4, 4, BATCH_SIZE as u32);
         }
 
         encoder.copy_buffer_to_buffer(
@@ -262,7 +270,7 @@ impl Compute {
         queue.submit(std::iter::once(encoder.finish()));
     }
 
-    pub fn get(&self, device: &Device) -> Option<Box<ChunkBlocks>> {
+    pub fn get(&self, device: &Device) -> Option<Vec<Box<ChunkBlocks>>> {
         let chunkmaker_buffer_slice = self.chunkmaker_staging_buffer.slice(..);
         let (sender, receiver) = mpsc::channel();
 
@@ -284,17 +292,25 @@ impl Compute {
             let chunk_result: &[BlockType] = unsafe {
                 std::slice::from_raw_parts(
                     chunk_data.as_ptr() as *const BlockType,
-                    NUM_CHUNK_BLOCKS,
+                    NUM_CHUNK_BLOCKS * BATCH_SIZE,
                 )
             };
 
-            let blocks: Box<ChunkBlocks> = Box::new(chunk_result.try_into().unwrap());
+            let mut chunks = Vec::with_capacity(BATCH_SIZE);
+            for i in 0..BATCH_SIZE {
+                let start = i * NUM_CHUNK_BLOCKS;
+                let end = start + NUM_CHUNK_BLOCKS;
+                let chunk_slice = &chunk_result[start..end];
+                
+                let blocks: Box<ChunkBlocks> = Box::new(chunk_slice.try_into().unwrap());
+                chunks.push(blocks);
+            }
             
             // 見るためのハンドルを片付けてバッファを閉じる
             drop(chunk_data);
             self.chunkmaker_staging_buffer.unmap();
             
-            Some(blocks)
+            Some(chunks)
         } else {
             println!("データの回収に失敗しました");
             None

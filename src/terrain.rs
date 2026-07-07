@@ -7,7 +7,7 @@ use wgpu::util::DeviceExt;
 
 use crate::camera::Camera;
 use crate::chunk::Rle;
-use crate::compute::Compute;
+use crate::compute::{ChunkUniforms, Compute};
 use crate::game::BlockType::Air;
 use crate::{chunk, create_terrain};
 use crate::{consts::*, game::BlockType, player::Aabb};
@@ -204,27 +204,75 @@ impl Terrain {
         let camera_pos = camera.eye;
         
         // --- Rayonでの非同期生成の送信 ---
-        for &(cx, cy, cz) in &coords {
-            self.chunk_in_progress.insert((cx, cy, cz));
-            let tx = self.chunk_tx.clone();
-            
-            compute.update(device, queue, [cx, cy, cz], seed);
-            let blocks = compute.get(device);
+        while !coords.is_empty() {
+            let mut chunk_uniforms = Vec::with_capacity(16);
+            let mut batch_coords = Vec::with_capacity(16);
 
-            rayon::spawn(move || {
-                let (verts, inds) =
-                    create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
-                let compressed = chunk::compress(&blocks);
+            for _ in 0..16 {
+                if let Some((cx, cy, cz)) = coords.pop() {
+                    self.chunk_in_progress.insert((cx, cy, cz));
+                    batch_coords.push((cx, cy, cz));
 
-                let _ = tx.send(ChunkResult {
-                    pos: (cx, cy, cz),
-                    blocks,
-                    compressed,
-                    verts,
-                    inds,
-                });
-            });
+                    chunk_uniforms.push(
+                        ChunkUniforms {
+                            chunk_pos: [cx, cy, cz],
+                            seed,
+                        }
+                    );
+                } else {
+                    chunk_uniforms.push(ChunkUniforms {
+                        chunk_pos: [0, 0, 0],
+                        seed,
+                    });
+                }
+            }
+
+            compute.update(device, queue, &chunk_uniforms);
+            let chunks = compute.get(device);
+
+            if let Some(ref chunk) = chunks {
+                for (blocks, &(cx, cy, cz)) in chunk.iter().zip(&batch_coords) {
+                    let tx = self.chunk_tx.clone();
+                    let blocks = Some(blocks.clone());
+                    
+                    rayon::spawn(move || {
+                        let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
+                        let compressed = chunk::compress(&blocks);
+                        
+                        let _ = tx.send(ChunkResult {
+                            pos: (cx, cy, cz),
+                            blocks,
+                            compressed,
+                            verts,
+                            inds,
+                        });
+                    });
+                }
+            }
+        
         }
+
+        // for &(cx, cy, cz) in &coords {
+        //     self.chunk_in_progress.insert((cx, cy, cz));
+        //     let tx = self.chunk_tx.clone();
+            
+        //     compute.update(device, queue, [cx, cy, cz], seed);
+        //     let blocks = compute.get(device);
+
+        //     rayon::spawn(move || {
+        //         let (verts, inds) =
+        //             create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
+        //         let compressed = chunk::compress(&blocks);
+
+        //         let _ = tx.send(ChunkResult {
+        //             pos: (cx, cy, cz),
+        //             blocks,
+        //             compressed,
+        //             verts,
+        //             inds,
+        //         });
+        //     });
+        // }
     }
 
     // 最初は初期ポジのXZに位置するチャンクだけ作る

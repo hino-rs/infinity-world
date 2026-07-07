@@ -9,7 +9,7 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
 use crate::camera::CameraGpu;
-use crate::compute::Compute;
+use crate::compute::{BATCH_SIZE, ChunkUniforms, Compute};
 use crate::fps::FpsCounter;
 use crate::gpu::GpuContext;
 use crate::pipeline::PipelineRegistry;
@@ -189,7 +189,8 @@ impl ApplicationHandler for Application {
                     world.update(dt, &gpu.device, &pipelines.storage_bind_group_layout, compute, &gpu.queue);
                     camera_gpu.update(&gpu.queue, &world.camera);
                     let _delta = self.fps.tick();
-                    compute.update(&gpu.device, &gpu.queue, [0, 0, 0], world.seed);
+                    let chunk_uniforms = vec![ChunkUniforms::new(world.seed); BATCH_SIZE];
+                    compute.update(&gpu.device, &gpu.queue, &chunk_uniforms);
                     gpu.render(
                         render,
                         pipelines,

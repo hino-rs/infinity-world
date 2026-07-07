@@ -19,7 +19,7 @@ struct ChunkUniforms {
     seed: i32,
 }
 
-@group(0) @binding(0) var<uniform> uniforms: ChunkUniforms;
+@group(0) @binding(0) var<storage, read> uniforms: array<ChunkUniforms>;
 @group(0) @binding(2) var<storage, read_write> env_data: array<u32>;
 
 fn calc_saturated_water(temp: f32) -> f32 {
@@ -32,15 +32,16 @@ fn calc_saturated_water(temp: f32) -> f32 {
 fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let x = global_id.x;
     let z = global_id.y;
+    let chunk_idx = global_id.z;
 
     if (x >= CHUNK_SIZE_U || z >= CHUNK_SIZE_U) {
         return;
     }
 
-    let cx = uniforms.chunk_pos.x;
-    let cy = uniforms.chunk_pos.y;
-    let cz = uniforms.chunk_pos.z;
-    let seed = uniforms.seed;
+    let cx = uniforms[chunk_idx].chunk_pos.x;
+    let cy = uniforms[chunk_idx].chunk_pos.y;
+    let cz = uniforms[chunk_idx].chunk_pos.z;
+    let seed = uniforms[chunk_idx].seed;
 
     let wx = f32(cx * 32 + i32(x));
     let wz = f32(cz * 32 + i32(z));
@@ -66,9 +67,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         water = 10.0 * (30.0 * g);
     }
 
+    let chunk_offset = chunk_idx * (CHUNK_SIZE_U * CHUNK_SIZE_U * CHUNK_SIZE_U);
+
     for (var y = 0u; y < CHUNK_SIZE_U; y++) {
         let wy = cy * CHUNK_SIZE_I + i32(y);
-        let index = y * (CHUNK_SIZE_U * CHUNK_SIZE_U) + x * CHUNK_SIZE_U + z;
+        let index = chunk_offset + y * (CHUNK_SIZE_U * CHUNK_SIZE_U) + x * CHUNK_SIZE_U + z;
 
         // 気温 = 海面(100)気温 - 0.65 * 海面からの高さ / 100.0
         let temperature = sealevel_temperature - 0.65 * f32(max(wy - SEA_LEVEL, 1)) / 100.0;
