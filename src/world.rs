@@ -68,12 +68,15 @@ impl World {
         let prev_player_pos = self.player.current_chunk_pos;
         let current_player_pos = self.player.current_chunk_pos();
         
+        let vp = self.camera.build_view_projection_matrix(1.0);
         // チャンク生成
-        self.terrain.add_chunks(device, self.seed, player_pos, storage_layout, &self.camera, compute, queue);
+        self.terrain.add_chunks(device, self.seed, player_pos, storage_layout, &self.camera, compute, queue, &vp);
+        if self.ticks % 3 == 0 {
+            // チャンク掃除
+            self.terrain.clear_chunks(player_pos, &vp);
+        }
         if prev_player_pos != current_player_pos {
             self.player.current_chunk_pos = current_player_pos;
-            // チャンク掃除
-            self.terrain.clear_chunks(player_pos);
         }
         
         self.ticks = self.ticks.wrapping_add_signed(1);

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::mpsc;
 
-use glam::{IVec3, Vec3};
+use glam::{IVec3, Mat4, Vec3};
 use num_traits::{AsPrimitive, Num};
 use wgpu::util::DeviceExt;
 
@@ -56,20 +56,41 @@ pub struct Terrain {
 }
 
 impl Terrain {
-    pub fn clear_chunks(&mut self, center: IVec3) {
+    pub fn clear_chunks(&mut self, center: IVec3, vp: &Mat4) {
         let cx_player = center.x.div_euclid(CHUNK_SIZE_I32);
         let cy_player = center.y.div_euclid(CHUNK_SIZE_I32);
         let cz_player = center.z.div_euclid(CHUNK_SIZE_I32);
 
-        let threshold = RADIUS + 1;
+        let threshold = 16;
 
         let mut remove_poses = Vec::new();
         for &chunk_pos in self.chunks.keys() {
             let (cx, cy, cz) = chunk_pos;
-            if (cx - cx_player).abs() > threshold
-                || (cy - cy_player).abs() > threshold
-                || (cz - cz_player).abs() > threshold
-            {
+            
+            let dx = (cx - cx_player).abs();
+            let dy = (cy - cy_player).abs();
+            let dz = (cz - cz_player).abs();
+
+            // 描画距離以上はもちろん掃除する
+            if dx > RADIUS || dy > Y_RADIUS || dz > RADIUS {
+                remove_poses.push(chunk_pos);
+                continue;
+            }
+
+            // threshold未満は無条件に掃除しない
+            if dx < threshold && dy < threshold && dz < threshold {
+                continue;
+            }
+
+            let min_pos = Vec3::new(
+                (cx * CHUNK_SIZE_I32) as f32,
+                (cy * CHUNK_SIZE_I32) as f32,
+                (cz * CHUNK_SIZE_I32) as f32,
+            );
+            let max_pos = min_pos + Vec3::splat(CHUNK_SIZE_F32);
+
+            // 視錐台カリング的に掃除する
+            if !Camera::is_aabb_in_frustum(min_pos, max_pos, vp) {
                 remove_poses.push(chunk_pos);
             }
         }
@@ -88,6 +109,7 @@ impl Terrain {
         camera: &Camera,
         compute: &Compute,
         queue: &wgpu::Queue,
+        vp: &Mat4,
     ) {
         // --- 計算結果の受信とGPUバッファの作成 ---
         let cx_player = center.x.div_euclid(CHUNK_SIZE_I32);
@@ -143,8 +165,6 @@ impl Terrain {
         }
 
         let max_to_spawn = max_pending - self.chunk_in_progress.len();
-
-        let vp = camera.build_view_projection_matrix(1.0);
 
         let cx = center.x.div_euclid(CHUNK_SIZE_I32);
         let cy = center.y.div_euclid(CHUNK_SIZE_I32);
@@ -202,7 +222,7 @@ impl Terrain {
             }
         }
         let camera_pos = camera.eye;
-        
+
         // --- Rayonでの非同期生成の送信 ---
         while !coords.is_empty() {
             let mut chunk_uniforms = Vec::with_capacity(16);
@@ -213,12 +233,10 @@ impl Terrain {
                     self.chunk_in_progress.insert((cx, cy, cz));
                     batch_coords.push((cx, cy, cz));
 
-                    chunk_uniforms.push(
-                        ChunkUniforms {
-                            chunk_pos: [cx, cy, cz],
-                            seed,
-                        }
-                    );
+                    chunk_uniforms.push(ChunkUniforms {
+                        chunk_pos: [cx, cy, cz],
+                        seed,
+                    });
                 } else {
                     chunk_uniforms.push(ChunkUniforms {
                         chunk_pos: [0, 0, 0],
@@ -234,11 +252,17 @@ impl Terrain {
                 for (blocks, &(cx, cy, cz)) in chunk.iter().zip(&batch_coords) {
                     let tx = self.chunk_tx.clone();
                     let blocks = Some(blocks.clone());
-                    
+
                     rayon::spawn(move || {
-                        let (verts, inds) = create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
+                        let (verts, inds) = create_terrain::build_chunk_mesh(
+                            &blocks,
+                            cx,
+                            cy,
+                            cz,
+                            camera_pos.as_ivec3(),
+                        );
                         let compressed = chunk::compress(&blocks);
-                        
+
                         let _ = tx.send(ChunkResult {
                             pos: (cx, cy, cz),
                             blocks,
@@ -249,13 +273,12 @@ impl Terrain {
                     });
                 }
             }
-        
         }
 
         // for &(cx, cy, cz) in &coords {
         //     self.chunk_in_progress.insert((cx, cy, cz));
         //     let tx = self.chunk_tx.clone();
-            
+
         //     compute.update(device, queue, [cx, cy, cz], seed);
         //     let blocks = compute.get(device);
 
