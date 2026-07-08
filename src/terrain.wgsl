@@ -1,8 +1,8 @@
 const CHUNK_SIZE_U: u32 = 32;
 const CHUNK_SIZE_I: i32 = i32(CHUNK_SIZE_U);
 const CHUNK_SIZE_F: f32 = f32(CHUNK_SIZE_I);
-const SCALE: f32 = 512.0;
-const MOUNTAIN_HEIGHT: f32 = 256.0;
+const SCALE: f32 = 1024.0;
+const MOUNTAIN_HEIGHT: f32 = 128.0;
 const SEA_LEVEL: i32 = 10;
 const DIRT_DEPTH: i32 = 4;
 
@@ -50,37 +50,38 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         let env = unpack2x16float(env_data[index]);
 
         if (wy <= h) {
-            if wy == h {
-                if h > 45 {
-                    // blocks[index] = 1u;
-                    if env.x < 21.0 {
-                        blocks[index] = 101u;
-                    } else {
-                        blocks[index] = 104u;
-                    }
-                } else {
-                    // blocks[index] = 3u;
-                    if env.x < 21.0 {
-                        blocks[index] = 101u;
-                    } else {
-                        blocks[index] = 104u;
-                    }
-                }
-            } else if wy >= h - DIRT_DEPTH {
-                // blocks[index] = 2u;
-                if env.x < 21.0 {
-                    blocks[index] = 101u;
-                } else {
-                    blocks[index] = 104u;
-                }
-            } else {
-                // blocks[index] = 1u;
-                if env.x < 21.0 {
-                    blocks[index] = 101u;
-                } else {
-                    blocks[index] = 104u;
-                }
-            }
+            blocks[index] = 1u;
+            // if wy == h {
+            //     if h > 45 {
+            //         // blocks[index] = 1u;
+            //         if env.x < 21.0 {
+            //             blocks[index] = 1u;
+            //         } else {
+            //             blocks[index] = 1u;
+            //         }
+            //     } else {
+            //         // blocks[index] = 3u;
+            //         if env.x < 21.0 {
+            //             blocks[index] = 1u;
+            //         } else {
+            //             blocks[index] = 1u;
+            //         }
+            //     }
+            // } else if wy >= h - DIRT_DEPTH {
+            //     // blocks[index] = 2u;
+            //     if env.x < 21.0 {
+            //         blocks[index] = 1u;
+            //     } else {
+            //         blocks[index] = 1u;
+            //     }
+            // } else {
+            //     // blocks[index] = 1u;
+            //     if env.x < 21.0 {
+            //         blocks[index] = 1u;
+            //     } else {
+            //         blocks[index] = 1u;
+            //     }
+            // }
         } else if wy < SEA_LEVEL {
             blocks[index] = 100u;
         } else {

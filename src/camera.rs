@@ -1,7 +1,9 @@
 use std::f32::consts::TAU;
 
 use wgpu::util::DeviceExt;
-use glam::{Mat4, Vec3};
+use glam::{IVec3, Mat4, Vec3};
+
+use crate::consts::CHUNK_SIZE_F32;
 
 pub struct Camera {
     pub eye: Vec3,
@@ -81,6 +83,13 @@ impl Camera {
             znear,
             sensitivity,
         }
+    }
+
+    pub fn position_to_chunk_pos(&self) -> IVec3 {
+        let cx = self.eye.x.div_euclid(CHUNK_SIZE_F32) as i32;
+        let cy = self.eye.y.div_euclid(CHUNK_SIZE_F32) as i32;
+        let cz = self.eye.z.div_euclid(CHUNK_SIZE_F32) as i32;
+        IVec3::new(cx, cy, cz)
     }
 
     /// マウスの移動量からカメラの向き角を更新し、ピッチ角が真上・真下を向かないよう（±89度）制限する
