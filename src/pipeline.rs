@@ -10,6 +10,8 @@ pub struct PipelineRegistry {
     pub render_pipeline_layout: wgpu::PipelineLayout,
     pub blocks_render_pipeline: wgpu::RenderPipeline,
     pub sky_render_pipeline: wgpu::RenderPipeline,   
+    pub post_process_bind_group_layout: wgpu::BindGroupLayout,
+    pub post_process_pipeline: wgpu::RenderPipeline,
 }
 
 #[repr(C)]
@@ -205,6 +207,85 @@ impl PipelineRegistry {
             label: Some("Uniform Bind Group"),
         });
 
+        let post_process_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Post Process Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("post_process.wgsl").into()),
+        });
+
+        let post_process_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Depth,
+                        },
+                        count: None,
+                    },
+                ],
+                label: Some("Post Process Bind Group Layout"),
+            });
+
+        let post_process_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Post Process Pipeline Layout"),
+                bind_group_layouts: &[
+                    Some(&post_process_bind_group_layout),
+                    Some(&camera_uniform_bind_group_layout),
+                    Some(&general_uniform_bind_group_layout),
+                ],
+                immediate_size: 0,
+            });
+
+        let post_process_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Post Process Render Pipeline"),
+            layout: Some(&post_process_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &post_process_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &post_process_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: 1,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        });
+
         Self {
             general_uniform_bind_group_layout,
             camera_uniform_bind_group_layout,
@@ -215,6 +296,8 @@ impl PipelineRegistry {
             render_pipeline_layout,
             blocks_render_pipeline,
             sky_render_pipeline,
+            post_process_bind_group_layout,
+            post_process_pipeline,
         }
     }
 

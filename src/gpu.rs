@@ -92,6 +92,12 @@ impl GpuContext {
                 RenderInfo::create_depth_texture(&self.device, &self.config);
             render_info.depth_texture = depth_texture;
             render_info.depth_view = depth_view;
+
+            // カラーテクスチャを再生成
+            let (color_texture, color_view) =
+                RenderInfo::create_color_texture(&self.device, &self.config);
+            render_info.color_texture = color_texture;
+            render_info.color_view = color_view;
         }
     }
 
@@ -137,7 +143,7 @@ impl GpuContext {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view: &render_info.color_view,
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
@@ -190,6 +196,52 @@ impl GpuContext {
             render_pass.set_bind_group(1, &camera_gpu.bind_group, &[]);
             // 頂点バッファを使わずに、3つの頂点（インデックス0, 1, 2）で描画を実行
             render_pass.draw(0..3, 0..1);
+        }
+
+        // ポストプロセッシング（フォグ）パスを実行
+        {
+            let post_process_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &pipelines.post_process_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&render_info.color_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&render_info.depth_view),
+                    },
+                ],
+                label: Some("Post Process Bind Group"),
+            });
+
+            let mut post_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Post Process Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view, // 画面サーフェスに書き出す
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None, // 深度テストは不要
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+            post_pass.set_pipeline(&pipelines.post_process_pipeline);
+            post_pass.set_bind_group(0, &post_process_bind_group, &[]);
+            post_pass.set_bind_group(1, &camera_gpu.bind_group, &[]);
+            post_pass.set_bind_group(2, &pipelines.general_uniform_bind_group, &[]);
+            post_pass.draw(0..3, 0..1); // 全画面三角形を描画
         }
 
         

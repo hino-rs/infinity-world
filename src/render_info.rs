@@ -1,10 +1,24 @@
 pub struct RenderInfo {
     pub depth_texture: wgpu::Texture,
     pub depth_view: wgpu::TextureView,
+    pub color_texture: wgpu::Texture,
+    pub color_view: wgpu::TextureView,
 }
 
 impl RenderInfo {
     pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> Self {
+        let (depth_texture, depth_view) = Self::create_depth_texture(device, config);
+        let (color_texture, color_view) = Self::create_color_texture(device, config);
+        
+        Self {
+            depth_texture,
+            depth_view,
+            color_texture,
+            color_view,
+        }
+    }
+
+    pub fn create_depth_texture(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> (wgpu::Texture, wgpu::TextureView) {
         let size = wgpu::Extent3d {
             width: config.width,
             height: config.height,
@@ -23,25 +37,22 @@ impl RenderInfo {
         let texture = device.create_texture(&desc);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         
-        Self {
-            depth_texture: texture,
-            depth_view: view,
-        }
+        (texture, view)
     }
 
-    pub fn create_depth_texture(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> (wgpu::Texture, wgpu::TextureView) {
+    pub fn create_color_texture(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> (wgpu::Texture, wgpu::TextureView) {
         let size = wgpu::Extent3d {
             width: config.width,
             height: config.height,
             depth_or_array_layers: 1,
         };
         let desc = wgpu::TextureDescriptor {
-            label: Some("Depth Texture"),
+            label: Some("PostProcess Color Texture"),
             size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth32Float,
+            format: config.format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
