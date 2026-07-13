@@ -34,7 +34,7 @@ pub enum BlockType {
     Permafrost   = 66, // 永久凍土
     Latosol      = 67, // 酸性の赤土
 
-    // --- 水・凍り・溶岩: 100~ ---
+    // --- 水・氷・溶岩: 100~ ---
     Water     = 100,
     Ice       = 101,
     Glacier   = 102, // 氷河氷

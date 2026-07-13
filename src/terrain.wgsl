@@ -15,6 +15,38 @@ struct ChunkUniforms {
 @group(0) @binding(1) var<storage, read_write> blocks: array<u32>;
 @group(0) @binding(2) var<storage, read_write> env_data: array<u32>;
 
+struct Biome {
+    temp: f32,
+    humid: f32,
+    block_id: u32,
+}
+
+const BIOME_COUNT = 5u;
+const BIOMES = array<Biome, 5>(
+    Biome(25.0, 82.5, 67), // 熱帯雨林
+    Biome(22.5, 25.0, 7), // 熱帯
+    Biome(12.5, 67.5, 3), // 温帯
+    Biome(0.0, 75.0, 61), // 亜寒帯
+    Biome(-10.0, 82.5, 103), // 極寒
+);
+
+fn get_biome_id(t: f32, h: f32) -> u32 {
+    var min_distance = 9999.0;
+    var closest_id = 0u;
+
+    for (var i = 0u; i < BIOME_COUNT; i = i + 1u) {
+        var b = BIOMES[i];
+        let dt = b.temp - t;
+        let dh = b.humid - h;
+        let distance = dt*dt + dh*dh;
+
+        if (distance < min_distance) {
+            min_distance = distance;
+            closest_id = b.block_id;
+        }
+    }
+    return closest_id;
+}
 
 // ===================================================================
 // チャンク生成
@@ -51,11 +83,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         let env = unpack2x16float(env_data[index]);
 
         if (wy <= h) {
-            if env.y >= 60 {
-                blocks[index] = 67u;
-            } else {
-                blocks[index] = 1u;
-            }
+            blocks[index] = get_biome_id(env.x, env.y);
+            
             // if wy == h {
             //     if h > 45 {
             //         // blocks[index] = 1u;

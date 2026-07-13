@@ -10,6 +10,7 @@ use winit::window::Window;
 
 use crate::camera::CameraGpu;
 use crate::compute::{BATCH_SIZE, ChunkUniforms, Compute};
+use half::f16;
 use crate::fps::FpsCounter;
 use crate::gpu::GpuContext;
 use crate::pipeline::PipelineRegistry;
@@ -189,8 +190,31 @@ impl ApplicationHandler for Application {
                     world.update(dt, &gpu.device, &pipelines.storage_bind_group_layout, compute, &gpu.queue);
                     camera_gpu.update(&gpu.queue, &world.camera);
                     let _delta = self.fps.tick();
-                    let chunk_uniforms = vec![ChunkUniforms::new(world.seed); BATCH_SIZE];
+                    let cp = world.player.current_chunk_pos();
+                    let mut chunk_uniforms = vec![ChunkUniforms::new(world.seed); BATCH_SIZE];
+                    chunk_uniforms[0] = ChunkUniforms {
+                        chunk_pos: [cp.x, cp.y, cp.z],
+                        seed: world.seed,
+                    };
                     compute.update(&gpu.device, &gpu.queue, &chunk_uniforms);
+
+                    let mut current_temp = 0.0;
+                    let mut current_humid = 0.0;
+                    if let Some(envs) = compute.get_env(&gpu.device) {
+                        let player_block_pos = world.player.position.as_ivec3();
+                        let lx = player_block_pos.x.rem_euclid(32) as usize;
+                        let ly = player_block_pos.y.rem_euclid(32) as usize;
+                        let lz = player_block_pos.z.rem_euclid(32) as usize;
+                        let index = ly * 1024 + lx * 32 + lz;
+                        if index < envs[0].len() {
+                            let packed = envs[0][index];
+                            let temp_bits = (packed & 0xffff) as u16;
+                            let humid_bits = ((packed >> 16) & 0xffff) as u16;
+                            current_temp = f16::from_bits(temp_bits).to_f32();
+                            current_humid = f16::from_bits(humid_bits).to_f32();
+                        }
+                    }
+
                     gpu.render(
                         render,
                         pipelines,
@@ -199,6 +223,8 @@ impl ApplicationHandler for Application {
                         &world.camera,
                         &self.fps,
                         brush,
+                        current_temp,
+                        current_humid,
                     );
                     window.request_redraw();
                 }

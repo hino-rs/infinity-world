@@ -110,6 +110,8 @@ impl GpuContext {
         camera: &Camera,
         fps: &FpsCounter,
         brush: &mut TextBrush<FontArc>,
+        temp: f32,
+        humid: f32,
     ) {
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
@@ -249,6 +251,7 @@ impl GpuContext {
         let fps_text = format!("FPS: {:.0}", &fps.fps());
         let coord = camera.xyz();
         let coord_text = format!("{:.0}, {:.0}, {:.0}", coord.0, coord.1, coord.2);
+        let env_text = format!("気温: {:.1}, 湿度: {:.2}", temp, humid);
 
         let fps_section = TextSection::default()
             .add_text(
@@ -266,8 +269,16 @@ impl GpuContext {
             )
             .with_screen_position((10.0, 30.0));
 
+        let env_section = TextSection::default()
+            .add_text(
+                Text::new(&env_text)
+                    .with_scale(20.0)
+                    .with_color([0.0, 0.0, 0.0, 1.0]),
+            )
+            .with_screen_position((10.0, 50.0));
+
         brush
-            .queue(&self.device, &self.queue, [&fps_section, &coord_section])
+            .queue(&self.device, &self.queue, [&fps_section, &coord_section, &env_section])
             .unwrap();
 
         {
