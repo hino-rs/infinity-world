@@ -32,6 +32,7 @@ pub enum BlockType {
     Ash          = 64, // 火山灰土
     CrackedEarth = 65, // 乾裂土
     Permafrost   = 66, // 永久凍土
+    Latosol      = 67, // 酸性の赤土
 
     // --- 水・凍り・溶岩: 100~ ---
     Water     = 100,

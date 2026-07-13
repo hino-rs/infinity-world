@@ -850,6 +850,7 @@ dependencies = [
  "bytemuck",
  "env_logger",
  "glam",
+ "half",
  "log",
  "noise",
  "num-traits",

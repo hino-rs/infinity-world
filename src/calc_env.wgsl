@@ -2,7 +2,6 @@ const CHUNK_SIZE_U: u32 = 32;
 const CHUNK_SIZE_I: i32 = i32(CHUNK_SIZE_U);
 const CHUNK_SIZE_F: f32 = f32(CHUNK_SIZE_I);
 // const SCALE: f32 = 512.0;
-const SCALE: f32 = 1.0;
 const MOUNTAIN_HEIGHT: f32 = 256.0;
 const SEA_LEVEL: i32 = 10;
 const DIRT_DEPTH: i32 = 4;
@@ -13,6 +12,8 @@ const MIN_TEMP: f32 = -90.0;
 const MAX_HEIGHT: f32 = 10000.0;
 const MIN_HEIGT: f32 = 0.0;
 const OCTAVES: u32 = 2;
+
+const SCALE: f32 = 1024.0;
 
 struct ChunkUniforms {
     chunk_pos: vec3i,
@@ -46,12 +47,15 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let wx = f32(cx * 32 + i32(x));
     let wz = f32(cz * 32 + i32(z));
 
+    let sx = wx / SCALE;
+    let sz = wz / SCALE;
+
     // 海面の気温
-    var sealevel_temperature = fbm(wx, 0.0, wz, seed + 5);
+    var sealevel_temperature = fbm(sx, 0.0, sz, seed + 5);
     // -90.0~150.0に拡大しつつ、平均は15.0になるようにする
     sealevel_temperature = -90.0 + 150.0 * pow(sealevel_temperature, 0.4286);
     // 水蒸気量
-    var water = fbm(wx, 0.0, wz, seed - 5);
+    var water = fbm(sx, 0.0, sz, seed - 5);
     // ~40.0に拡大しつつ、2.5と18.5に最頻値を傾けさせる
     if water < 0.5 {
         let t = water / 0.5;

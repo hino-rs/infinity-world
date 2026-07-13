@@ -47,10 +47,15 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         let wy = uniforms[chunk_idx].chunk_pos.y * CHUNK_SIZE_I + i32(y);
         let index = chunk_offset + y * (CHUNK_SIZE_U * CHUNK_SIZE_U) + x * CHUNK_SIZE_U + z;
 
+        // x: 気温, y: 湿度%
         let env = unpack2x16float(env_data[index]);
 
         if (wy <= h) {
-            blocks[index] = 1u;
+            if env.y >= 60 {
+                blocks[index] = 67u;
+            } else {
+                blocks[index] = 1u;
+            }
             // if wy == h {
             //     if h > 45 {
             //         // blocks[index] = 1u;

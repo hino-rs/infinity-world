@@ -75,6 +75,7 @@ fn vs_main(
         case 64u:   { base_color = vec4f(0.45, 0.43, 0.42, 1.0); }    // Ash
         case 65u:   { base_color = vec4f(0.65, 0.48, 0.33, 1.0); }    // CrackedEarth
         case 66u:   { base_color = vec4f(0.40, 0.45, 0.50, 1.0); }    // Permafrost
+        case 67u:   { base_color = vec4f(0.71, 0.44, 0.42, 1.0); }
 
         // --- 水・凍り・溶岩 ---
         case 100u:  { base_color = vec4f(0.15, 0.45, 0.80, 0.6); }    // Water

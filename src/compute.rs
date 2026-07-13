@@ -4,6 +4,8 @@ use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferAddress, BufferBindingType, BufferDescriptor, BufferUsages, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device, MapMode, PipelineLayoutDescriptor, PollType, Queue, ShaderModuleDescriptor, ShaderSource, ShaderStages, util::{BufferInitDescriptor, DeviceExt}, wgt::CommandEncoderDescriptor,
 };
 
+use half::f16;
+
 use crate::{consts::{CHUNK_VOLUME, NUM_CHUNK_BLOCKS}, game::BlockType, terrain::ChunkBlocks};
 
 pub const BATCH_SIZE: usize = 16;
@@ -25,7 +27,8 @@ impl ChunkUniforms {
 }
 
 pub struct Compute {
-    chunkmaker_staging_buffer: Buffer,
+    blocks_staging_buffer: Buffer,
+    env_staging_buffer: Buffer,
     chunkmaker_bind_group: BindGroup,
     env_pipeline: ComputePipeline,
     biome_pipeline: ComputePipeline,
@@ -39,7 +42,8 @@ pub struct Compute {
 impl Compute {
     pub fn build(device: &Device) -> Self {
         let (
-            chunkmaker_staging_buffer,
+            blocks_staging_buffer,
+            env_staging_buffer,
             chunkmaker_bind_group,
             env_pipeline,
             biome_pipeline,
@@ -51,7 +55,8 @@ impl Compute {
         ) = Self::build_chunk_maker(device);
 
         Self {
-            chunkmaker_staging_buffer,
+            blocks_staging_buffer,
+            env_staging_buffer,
             chunkmaker_bind_group,
             env_pipeline,
             biome_pipeline,
@@ -65,7 +70,7 @@ impl Compute {
 
     pub fn build_chunk_maker(
         device: &Device,
-    ) -> (Buffer, BindGroup, ComputePipeline, ComputePipeline, ComputePipeline, Buffer, Buffer, BufferAddress, Buffer) {
+    ) -> (Buffer, Buffer, BindGroup, ComputePipeline, ComputePipeline, ComputePipeline, Buffer, Buffer, BufferAddress, Buffer) {
         let init_chunk = vec![0; CHUNK_VOLUME * BATCH_SIZE];
         let size = (init_chunk.len() * std::mem::size_of::<u32>()) as BufferAddress;
 
@@ -81,8 +86,15 @@ impl Compute {
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         });
 
-        let staging_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("ChunkMaker Staging Buffer"),
+        let blocks_staging_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("Blocks Staging Buffer"),
+            size,
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let env_staging_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("Environment Staging Buffer"),
             size,
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -199,7 +211,8 @@ impl Compute {
         });
 
         (
-            staging_buffer,
+            blocks_staging_buffer,
+            env_staging_buffer,
             bind_group,
             env_pipeline,
             biome_pipeline,
@@ -234,6 +247,15 @@ impl Compute {
 
             cp.dispatch_workgroups(4, 4, BATCH_SIZE as u32);
         }
+
+        encoder.copy_buffer_to_buffer(
+            &self.env_storage_buffer,
+            0,
+            &self.env_staging_buffer,
+            0,
+            self.chunkmaker_data_size,
+        );
+
         // // バイオーム計算
         // {
         //     let mut cp = encoder.begin_compute_pass(&ComputePassDescriptor {
@@ -262,7 +284,7 @@ impl Compute {
         encoder.copy_buffer_to_buffer(
             &self.blocks_storage_buffer,
             0,
-            &self.chunkmaker_staging_buffer,
+            &self.blocks_staging_buffer,
             0,
             self.chunkmaker_data_size,
         );
@@ -270,11 +292,55 @@ impl Compute {
         queue.submit(std::iter::once(encoder.finish()));
     }
 
-    pub fn get(&self, device: &Device) -> Option<Vec<Box<ChunkBlocks>>> {
-        let chunkmaker_buffer_slice = self.chunkmaker_staging_buffer.slice(..);
+    pub fn get_env(&self, device: &Device) -> Option<Vec<Box<[u32; NUM_CHUNK_BLOCKS]>>> {
+        let env_buffer_slice = self.env_staging_buffer.slice(..);
         let (sender, receiver) = mpsc::channel();
 
-        chunkmaker_buffer_slice.map_async(MapMode::Read, move |v| {
+        env_buffer_slice.map_async(MapMode::Read, move |v| {
+            sender.send(v).unwrap();
+        });
+
+        device
+            .poll(PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .unwrap();
+
+        if let Ok(Ok(())) = receiver.recv() {
+            let env_data = env_buffer_slice.get_mapped_range();
+            let env_result: &[u32] = unsafe {
+                std::slice::from_raw_parts(
+                    env_data.as_ptr() as *const u32,
+                    NUM_CHUNK_BLOCKS * BATCH_SIZE,
+                )
+            };
+
+            let mut data = Vec::with_capacity(BATCH_SIZE);
+            for i in 0..BATCH_SIZE {
+                let start = i * NUM_CHUNK_BLOCKS;
+                let end = start + NUM_CHUNK_BLOCKS;
+                let env_slice = &env_result[start..end];
+                
+                let blocks_env: Box<[u32; NUM_CHUNK_BLOCKS]> = Box::new(env_slice.try_into().unwrap());
+                data.push(blocks_env);
+            }
+
+            drop(env_data);
+            self.env_staging_buffer.unmap();
+            
+            Some(data)
+        } else {
+            println!("データの回収に失敗しました");
+            None
+        }
+    }
+
+    pub fn get_blocks(&self, device: &Device) -> Option<Vec<Box<ChunkBlocks>>> {
+        let blocks_buffer_slice = self.blocks_staging_buffer.slice(..);
+        let (sender, receiver) = mpsc::channel();
+
+        blocks_buffer_slice.map_async(MapMode::Read, move |v| {
             sender.send(v).unwrap();
         });
 
@@ -287,7 +353,7 @@ impl Compute {
 
         if let Ok(Ok(())) = receiver.recv() {
             // バッファのメモリ領域を見る
-            let chunk_data = chunkmaker_buffer_slice.get_mapped_range();
+            let chunk_data = blocks_buffer_slice.get_mapped_range();
             // &[u8]から&[u32]に復元
             let chunk_result: &[BlockType] = unsafe {
                 std::slice::from_raw_parts(
@@ -308,7 +374,7 @@ impl Compute {
             
             // 見るためのハンドルを片付けてバッファを閉じる
             drop(chunk_data);
-            self.chunkmaker_staging_buffer.unmap();
+            self.blocks_staging_buffer.unmap();
             
             Some(chunks)
         } else {

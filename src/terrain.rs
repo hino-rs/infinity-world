@@ -246,7 +246,14 @@ impl Terrain {
             }
 
             compute.update(device, queue, &chunk_uniforms);
-            let chunks = compute.get(device);
+            let chunks = compute.get_blocks(device);
+            let env_data = compute.get_env(device).unwrap()[0][100];
+            let x_bits = (env_data & 0xFFFF) as u16;
+            let y_bits = (env_data >> 16) as u16;
+            let temperature = half::f16::from_bits(x_bits).to_f32();
+            let humidity = half::f16::from_bits(y_bits).to_f32();
+
+            print!("\r気温:{temperature:.1}, 湿度:{humidity:.1}");
 
             if let Some(ref chunk) = chunks {
                 for (blocks, &(cx, cy, cz)) in chunk.iter().zip(&batch_coords) {
