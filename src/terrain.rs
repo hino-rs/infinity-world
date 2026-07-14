@@ -14,6 +14,8 @@ use crate::{consts::*, game::BlockType, player::Aabb};
 
 pub type ChunkBlocks = [BlockType; NUM_CHUNK_BLOCKS];
 
+
+
 #[derive(Debug)]
 pub struct Chunk {
     pub blocks: Option<Vec<Rle>>,
@@ -34,8 +36,8 @@ impl Chunk {
     }
 }
 
-type ChunkPos = (i32, i32, i32);
-type Chunks = HashMap<ChunkPos, Chunk>;
+pub type ChunkPos = (i32, i32, i32);
+pub type Chunks = HashMap<ChunkPos, Chunk>;
 
 pub struct ChunkResult {
     pub pos: ChunkPos,
@@ -53,6 +55,11 @@ pub struct Terrain {
     pub chunk_tx: mpsc::Sender<ChunkResult>,
     // 現在生成中のチャンクを追跡するため
     pub chunk_in_progress: HashSet<ChunkPos>,
+    // 現在GPU計算～読み取り待ちになっているチャンク座標リスト
+    pub gpu_in_progress: Option<Vec<ChunkPos>>,
+    // map_async の完了通知を受け取るためのチャンネル
+    pub gpu_rx: mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>,
+    pub gpu_tx: mpsc::Sender<Result<(), wgpu::BufferAsyncError>>,
 }
 
 impl Terrain {
@@ -158,13 +165,63 @@ impl Terrain {
             });
         }
 
+        // --- GPU非同期マッピングの完了確認 ---
+        if let Some(batch_coords) = self.gpu_in_progress.take() {
+            match self.gpu_rx.try_recv() {
+                Ok(Ok(())) => {
+                    let chunk_blocks = compute.read_blocks();
+                    let camera_pos = camera.eye;
+
+                    for (blocks, &(cx, cy, cz)) in chunk_blocks.iter().zip(&batch_coords) {
+                        let tx = self.chunk_tx.clone();
+                        let blocks = Some(blocks.clone());
+
+                        rayon::spawn(move || {
+                            let (verts, inds) = create_terrain::build_chunk_mesh(
+                                &blocks,
+                                cx,
+                                cy,
+                                cz,
+                                camera_pos.as_ivec3(),
+                            );
+                            let compressed = chunk::compress(&blocks);
+
+                            let _ = tx.send(ChunkResult {
+                                pos: (cx, cy, cz),
+                                blocks,
+                                compressed,
+                                verts,
+                                inds,
+                            });
+                        });
+                    }
+                }
+                Ok(Err(e)) => {
+                    println!("GPU terrain generation mapping failed: {:?}", e);
+                    for pos in batch_coords {
+                        self.chunk_in_progress.remove(&pos);
+                    }
+                }
+                Err(mpsc::TryRecvError::Empty) => {
+                    // まだ計算中。このフレームは戻す。
+                    self.gpu_in_progress = Some(batch_coords);
+                    return;
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    panic!("GPU async channel disconnected!");
+                }
+            }
+        }
+
         // --- 新規生成が必要なチャンク座標の探索 ---
-        let max_pending = 32;
-        if self.chunk_in_progress.len() >= max_pending {
+        if self.chunk_in_progress.len() >= CHANK_GEN_MAX_PENDING {
             return;
         }
 
-        let max_to_spawn = max_pending - self.chunk_in_progress.len();
+        let max_to_spawn = (CHANK_GEN_MAX_PENDING - self.chunk_in_progress.len()).min(BATCH_SIZE);
+        if max_to_spawn == 0 {
+            return;
+        }
 
         let cx = center.x.div_euclid(CHUNK_SIZE_I32);
         let cy = center.y.div_euclid(CHUNK_SIZE_I32);
@@ -181,7 +238,6 @@ impl Terrain {
         while let Some(pos) = gen_queue.pop_front() {
             let (px, py, pz) = pos;
 
-            // 範囲外なら探索をスキップ
             if (px - cx).abs() > RADIUS
                 || (py - cy).abs() > Y_RADIUS
                 || (pz - cz).abs() > RADIUS
@@ -190,7 +246,6 @@ impl Terrain {
                 continue;
             }
 
-            // 視野内かつ未生成のチャンクであれば生成対象に追加
             let min_pos = Vec3::new(
                 (px * CHUNK_SIZE_I32) as f32,
                 (py * CHUNK_SIZE_I32) as f32,
@@ -206,7 +261,6 @@ impl Terrain {
                     }
                 }
             }
-            // 隣接する6方向のチャンクをキューに追加
             for (dx, dy, dz) in &[
                 (1, 0, 0),
                 (-1, 0, 0),
@@ -216,15 +270,17 @@ impl Terrain {
                 (0, 0, -1),
             ] {
                 let neighbor = (px + dx, py + dy, pz + dz);
+                if neighbor.1 < 0 {
+                    continue;
+                }
                 if visited.insert(neighbor) {
                     gen_queue.push_back(neighbor);
                 }
             }
         }
-        let camera_pos = camera.eye;
 
-        // --- Rayonでの非同期生成の送信 ---
-        while !coords.is_empty() {
+        // --- GPUでの非同期生成の送信 ---
+        if !coords.is_empty() {
             let mut chunk_uniforms = Vec::with_capacity(16);
             let mut batch_coords = Vec::with_capacity(16);
 
@@ -245,34 +301,9 @@ impl Terrain {
                 }
             }
 
-            compute.update(device, queue, &chunk_uniforms);
-            let chunks = compute.get_blocks(device);
-
-            if let Some(ref chunk) = chunks {
-                for (blocks, &(cx, cy, cz)) in chunk.iter().zip(&batch_coords) {
-                    let tx = self.chunk_tx.clone();
-                    let blocks = Some(blocks.clone());
-
-                    rayon::spawn(move || {
-                        let (verts, inds) = create_terrain::build_chunk_mesh(
-                            &blocks,
-                            cx,
-                            cy,
-                            cz,
-                            camera_pos.as_ivec3(),
-                        );
-                        let compressed = chunk::compress(&blocks);
-
-                        let _ = tx.send(ChunkResult {
-                            pos: (cx, cy, cz),
-                            blocks,
-                            compressed,
-                            verts,
-                            inds,
-                        });
-                    });
-                }
-            }
+            compute.update_blocks(device, queue, &chunk_uniforms);
+            compute.request_blocks_async(self.gpu_tx.clone());
+            self.gpu_in_progress = Some(batch_coords);
         }
 
         // for &(cx, cy, cz) in &coords {
@@ -301,12 +332,16 @@ impl Terrain {
     // 最初は初期ポジのXZに位置するチャンクだけ作る
     pub fn new() -> Self {
         let (chunk_tx, chunk_rx) = mpsc::channel();
+        let (gpu_tx, gpu_rx) = mpsc::channel();
 
         Self {
             chunks: HashMap::new(),
             chunk_rx,
             chunk_tx,
             chunk_in_progress: HashSet::new(),
+            gpu_in_progress: None,
+            gpu_rx,
+            gpu_tx,
         }
     }
 

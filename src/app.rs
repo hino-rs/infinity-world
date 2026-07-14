@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 
 use web_time::Instant;
 use wgpu_text::glyph_brush::ab_glyph::FontArc;
@@ -9,7 +9,8 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
 use crate::camera::CameraGpu;
-use crate::compute::{BATCH_SIZE, ChunkUniforms, Compute};
+use crate::consts::BATCH_SIZE;
+use crate::compute::{ChunkUniforms, Compute};
 use half::f16;
 use crate::fps::FpsCounter;
 use crate::gpu::GpuContext;
@@ -25,6 +26,8 @@ pub struct AppOption {
     pub fullscreen: bool,
     pub debug: bool,
     pub touchpad: bool,
+    pub vsync: bool,
+    pub fullpower: bool,
 }
 
 /// アプリケーション本体
@@ -43,10 +46,16 @@ pub struct Application {
     pub frames: u128,
     option: AppOption,
     pub compute: Option<Compute>,
+    pub gpu_env_in_progress: bool,
+    pub env_rx: mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>,
+    pub env_tx: mpsc::Sender<Result<(), wgpu::BufferAsyncError>>,
+    pub current_temp: f32,
+    pub current_mois: f32,
 }
 
 impl Application {
     pub fn new(option: AppOption) -> Self {
+        let (env_tx, env_rx) = mpsc::channel();
         Self {
             window: None,
             gpu: None,
@@ -62,6 +71,11 @@ impl Application {
             frames: 0,
             option,
             compute: None,
+            gpu_env_in_progress: false,
+            env_rx,
+            env_tx,
+            current_temp: 0.0,
+            current_mois: 0.0,
         }
     }
 }
@@ -89,7 +103,7 @@ impl ApplicationHandler for Application {
         window.set_cursor_visible(false);
 
         let font = FontArc::try_from_slice(FONT_BYTES).expect("フォント読み込み失敗");
-        let gpu = pollster::block_on(GpuContext::new(Arc::clone(&window)));
+        let gpu = pollster::block_on(GpuContext::new(Arc::clone(&window), self.option.vsync, self.option.fullpower));
         let pipelines = PipelineRegistry::new(&gpu.device, &gpu.config);
         let world = World::new(
             gpu.config.width as f32 / gpu.config.height as f32,
@@ -190,29 +204,49 @@ impl ApplicationHandler for Application {
                     world.update(dt, &gpu.device, &pipelines.storage_bind_group_layout, compute, &gpu.queue);
                     camera_gpu.update(&gpu.queue, &world.camera);
                     let _delta = self.fps.tick();
-                    let cp = world.player.current_chunk_pos();
-                    let mut chunk_uniforms = vec![ChunkUniforms::new(world.seed); BATCH_SIZE];
-                    chunk_uniforms[0] = ChunkUniforms {
-                        chunk_pos: [cp.x, cp.y, cp.z],
-                        seed: world.seed,
-                    };
-                    compute.update(&gpu.device, &gpu.queue, &chunk_uniforms);
+                    let _ = gpu.device.poll(wgpu::PollType::Poll);
 
-                    let mut current_temp = 0.0;
-                    let mut current_mois = 0.0;
-                    if let Some(envs) = compute.get_env(&gpu.device) {
-                        let player_block_pos = world.player.position.as_ivec3();
-                        let lx = player_block_pos.x.rem_euclid(32) as usize;
-                        let ly = player_block_pos.y.rem_euclid(32) as usize;
-                        let lz = player_block_pos.z.rem_euclid(32) as usize;
-                        let index = ly * 1024 + lx * 32 + lz;
-                        if index < envs[0].len() {
-                            let packed = envs[0][index];
-                            let temp_bits = (packed & 0xffff) as u16;
-                            let mois_bits = ((packed >> 16) & 0xffff) as u16;
-                            current_temp = f16::from_bits(temp_bits).to_f32();
-                            current_mois = f16::from_bits(mois_bits).to_f32();
+                    if self.gpu_env_in_progress {
+                        match self.env_rx.try_recv() {
+                            Ok(Ok(())) => {
+                                let envs = compute.read_env();
+                                let player_block_pos = world.player.position.as_ivec3();
+                                let lx = player_block_pos.x.rem_euclid(32) as usize;
+                                let ly = player_block_pos.y.rem_euclid(32) as usize;
+                                let lz = player_block_pos.z.rem_euclid(32) as usize;
+                                let index = ly * 1024 + lx * 32 + lz;
+                                if index < envs[0].len() {
+                                    let packed = envs[0][index];
+                                    let temp_bits = (packed & 0xffff) as u16;
+                                    let mois_bits = ((packed >> 16) & 0xffff) as u16;
+                                    self.current_temp = f16::from_bits(temp_bits).to_f32();
+                                    self.current_mois = f16::from_bits(mois_bits).to_f32();
+                                }
+                                self.gpu_env_in_progress = false;
+                            }
+                            Ok(Err(e)) => {
+                                println!("GPU env generation mapping failed: {:?}", e);
+                                self.gpu_env_in_progress = false;
+                            }
+                            Err(mpsc::TryRecvError::Empty) => {
+                                // まだGPU計算中。何もしない（前回の値を保持）
+                            }
+                            Err(mpsc::TryRecvError::Disconnected) => {
+                                panic!("GPU env channel disconnected!");
+                            }
                         }
+                    }
+
+                    if !self.gpu_env_in_progress {
+                        let cp = world.player.current_chunk_pos();
+                        let mut chunk_uniforms = vec![ChunkUniforms::new(world.seed); BATCH_SIZE];
+                        chunk_uniforms[0] = ChunkUniforms {
+                            chunk_pos: [cp.x, cp.y, cp.z],
+                            seed: world.seed,
+                        };
+                        compute.update_env(&gpu.device, &gpu.queue, &chunk_uniforms);
+                        compute.request_env_async(self.env_tx.clone());
+                        self.gpu_env_in_progress = true;
                     }
 
                     gpu.render(
@@ -223,8 +257,8 @@ impl ApplicationHandler for Application {
                         &world.camera,
                         &self.fps,
                         brush,
-                        current_temp,
-                        current_mois,
+                        self.current_temp,
+                        self.current_mois,
                     );
                     window.request_redraw();
                 }

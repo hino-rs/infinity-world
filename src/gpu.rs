@@ -17,7 +17,7 @@ pub struct GpuContext {
 }
 
 impl GpuContext {
-    pub async fn new(window: Arc<Window>) -> Self {
+    pub async fn new(window: Arc<Window>, vsync: bool, fullpower: bool) -> Self {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -32,7 +32,7 @@ impl GpuContext {
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference: if fullpower { wgpu::PowerPreference::HighPerformance } else { wgpu::PowerPreference::default() },
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -59,7 +59,7 @@ impl GpuContext {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::AutoVsync,
+            present_mode: if vsync { wgpu::PresentMode::AutoVsync } else { wgpu::PresentMode::AutoNoVsync },
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,

@@ -1,12 +1,12 @@
 use std::sync::mpsc;
 
 use wgpu::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferAddress, BufferBindingType, BufferDescriptor, BufferUsages, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device, MapMode, PipelineLayoutDescriptor, PollType, Queue, ShaderModuleDescriptor, ShaderSource, ShaderStages, util::{BufferInitDescriptor, DeviceExt}, wgt::CommandEncoderDescriptor,
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferAddress, BufferBindingType, BufferDescriptor, BufferUsages, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device, MapMode, PipelineLayoutDescriptor, Queue, ShaderModuleDescriptor, ShaderSource, ShaderStages, util::{BufferInitDescriptor, DeviceExt}, wgt::CommandEncoderDescriptor,
 };
 
-use crate::{consts::{CHUNK_VOLUME, NUM_CHUNK_BLOCKS}, game::BlockType, terrain::ChunkBlocks};
+use crate::{consts::{BATCH_SIZE, CHUNK_VOLUME, NUM_CHUNK_BLOCKS}, game::BlockType, terrain::ChunkBlocks};
 
-pub const BATCH_SIZE: usize = 16;
+
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default)]
@@ -222,15 +222,15 @@ impl Compute {
         )
     }
 
-    pub fn update(&self, device: &Device, queue: &Queue, uniforms: &[ChunkUniforms]) {
+    pub fn update_env(&self, device: &Device, queue: &Queue, uniforms: &[ChunkUniforms]) {
         queue.write_buffer(
-            &self.chunkmaker_uniform_buffer, // 保持しているuniform_buffer
+            &self.chunkmaker_uniform_buffer,
             0,
             bytemuck::cast_slice(uniforms),
         );
 
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("Compute Command Encoder"),
+            label: Some("Compute Env Command Encoder"),
         });
 
         // 環境計算
@@ -254,18 +254,20 @@ impl Compute {
             self.chunkmaker_data_size,
         );
 
-        // // バイオーム計算
-        // {
-        //     let mut cp = encoder.begin_compute_pass(&ComputePassDescriptor {
-        //         label: Some("Biome Pass"),
-        //         timestamp_writes: None,
-        //     });
+        queue.submit(std::iter::once(encoder.finish()));
+    }
 
-        //     cp.set_pipeline(&self.biome_pipeline);
-        //     cp.set_bind_group(0, &self.chunkmaker_bind_group, &[]);
+    pub fn update_blocks(&self, device: &Device, queue: &Queue, uniforms: &[ChunkUniforms]) {
+        queue.write_buffer(
+            &self.chunkmaker_uniform_buffer,
+            0,
+            bytemuck::cast_slice(uniforms),
+        );
 
-        //     cp.dispatch_workgroups(4, 4, 1);
-        // }
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("Compute Blocks Command Encoder"),
+        });
+
         // 最終的な地形生成
         {
             let mut cp = encoder.begin_compute_pass(&ComputePassDescriptor {
@@ -290,95 +292,70 @@ impl Compute {
         queue.submit(std::iter::once(encoder.finish()));
     }
 
-    pub fn get_env(&self, device: &Device) -> Option<Vec<Box<[u32; NUM_CHUNK_BLOCKS]>>> {
-        let env_buffer_slice = self.env_staging_buffer.slice(..);
-        let (sender, receiver) = mpsc::channel();
-
-        env_buffer_slice.map_async(MapMode::Read, move |v| {
-            sender.send(v).unwrap();
+    pub fn request_env_async(&self, tx: mpsc::Sender<Result<(), wgpu::BufferAsyncError>>) {
+        let slice = self.env_staging_buffer.slice(..);
+        slice.map_async(MapMode::Read, move |v| {
+            let _ = tx.send(v);
         });
-
-        device
-            .poll(PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
-            .unwrap();
-
-        if let Ok(Ok(())) = receiver.recv() {
-            let env_data = env_buffer_slice.get_mapped_range();
-            let env_result: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    env_data.as_ptr() as *const u32,
-                    NUM_CHUNK_BLOCKS * BATCH_SIZE,
-                )
-            };
-
-            let mut data = Vec::with_capacity(BATCH_SIZE);
-            for i in 0..BATCH_SIZE {
-                let start = i * NUM_CHUNK_BLOCKS;
-                let end = start + NUM_CHUNK_BLOCKS;
-                let env_slice = &env_result[start..end];
-                
-                let blocks_env: Box<[u32; NUM_CHUNK_BLOCKS]> = Box::new(env_slice.try_into().unwrap());
-                data.push(blocks_env);
-            }
-
-            drop(env_data);
-            self.env_staging_buffer.unmap();
-            
-            Some(data)
-        } else {
-            println!("データの回収に失敗しました");
-            None
-        }
     }
 
-    pub fn get_blocks(&self, device: &Device) -> Option<Vec<Box<ChunkBlocks>>> {
-        let blocks_buffer_slice = self.blocks_staging_buffer.slice(..);
-        let (sender, receiver) = mpsc::channel();
+    pub fn read_env(&self) -> Vec<Box<[u32; NUM_CHUNK_BLOCKS]>> {
+        let slice = self.env_staging_buffer.slice(..);
+        let env_data = slice.get_mapped_range();
+        let env_result: &[u32] = unsafe {
+            std::slice::from_raw_parts(
+                env_data.as_ptr() as *const u32,
+                NUM_CHUNK_BLOCKS * BATCH_SIZE,
+            )
+        };
 
-        blocks_buffer_slice.map_async(MapMode::Read, move |v| {
-            sender.send(v).unwrap();
-        });
-
-        device
-            .poll(PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
-            .unwrap();
-
-        if let Ok(Ok(())) = receiver.recv() {
-            // バッファのメモリ領域を見る
-            let chunk_data = blocks_buffer_slice.get_mapped_range();
-            // &[u8]から&[u32]に復元
-            let chunk_result: &[BlockType] = unsafe {
-                std::slice::from_raw_parts(
-                    chunk_data.as_ptr() as *const BlockType,
-                    NUM_CHUNK_BLOCKS * BATCH_SIZE,
-                )
-            };
-
-            let mut chunks = Vec::with_capacity(BATCH_SIZE);
-            for i in 0..BATCH_SIZE {
-                let start = i * NUM_CHUNK_BLOCKS;
-                let end = start + NUM_CHUNK_BLOCKS;
-                let chunk_slice = &chunk_result[start..end];
-                
-                let blocks: Box<ChunkBlocks> = Box::new(chunk_slice.try_into().unwrap());
-                chunks.push(blocks);
-            }
+        let mut data = Vec::with_capacity(BATCH_SIZE);
+        for i in 0..BATCH_SIZE {
+            let start = i * NUM_CHUNK_BLOCKS;
+            let end = start + NUM_CHUNK_BLOCKS;
+            let env_slice = &env_result[start..end];
             
-            // 見るためのハンドルを片付けてバッファを閉じる
-            drop(chunk_data);
-            self.blocks_staging_buffer.unmap();
-            
-            Some(chunks)
-        } else {
-            println!("データの回収に失敗しました");
-            None
+            let blocks_env: Box<[u32; NUM_CHUNK_BLOCKS]> = Box::new(env_slice.try_into().unwrap());
+            data.push(blocks_env);
         }
+
+        drop(env_data);
+        self.env_staging_buffer.unmap();
+        
+        data
+    }
+
+    pub fn request_blocks_async(&self, tx: mpsc::Sender<Result<(), wgpu::BufferAsyncError>>) {
+        let slice = self.blocks_staging_buffer.slice(..);
+        slice.map_async(MapMode::Read, move |v| {
+            let _ = tx.send(v);
+        });
+    }
+
+    pub fn read_blocks(&self) -> Vec<Box<ChunkBlocks>> {
+        let slice = self.blocks_staging_buffer.slice(..);
+        let chunk_data = slice.get_mapped_range();
+        let chunk_result: &[BlockType] = unsafe {
+            std::slice::from_raw_parts(
+                chunk_data.as_ptr() as *const BlockType,
+                NUM_CHUNK_BLOCKS * BATCH_SIZE,
+            )
+        };
+
+        let mut chunks = Vec::with_capacity(BATCH_SIZE);
+        for i in 0..BATCH_SIZE {
+            let start = i * NUM_CHUNK_BLOCKS;
+            let end = start + NUM_CHUNK_BLOCKS;
+            let chunk_slice = &chunk_result[start..end];
+            
+            let blocks: Box<ChunkBlocks> = Box::new(chunk_slice.try_into().unwrap());
+            chunks.push(blocks);
+        }
+        
+        drop(chunk_data);
+        self.blocks_staging_buffer.unmap();
+        
+        chunks
     }
 }
 

@@ -27,11 +27,13 @@ fn main() {
     let args = std::env::args();
     args.for_each(|a| {
         match a.as_str() {
-            "full" => option.fullscreen = true,
+            "fullscreen" => option.fullscreen = true,
             "poll" => event_loop.set_control_flow(ControlFlow::Poll),
             "debug" => option.debug = true,
             "touch" => option.touchpad = true,
-            _ => {}
+            "vsync" => option.vsync = true,
+            "fullpower" => option.fullpower = true,
+            _ => { if !a.contains(".exe") { println!("存在しないコマンド: {a}") } }
         }
     });
 

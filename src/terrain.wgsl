@@ -652,7 +652,7 @@ fn bias(h: f32) -> f32 {
 fn get_height(x: f32, y: f32, z: f32, seed: i32) -> i32 {    
     let sc = scaling(x, y, z);
     let n = ridged(sc.x, 0.0, sc.z, seed, 2u);
-    let r = n * 100.0;
+    let r = n * n * 300.0;
 
     return i32(round(r));
     // let sc = scaling(x, 0.0, z);
