@@ -2,7 +2,7 @@ const CHUNK_SIZE_U: u32 = 32;
 const CHUNK_SIZE_I: i32 = i32(CHUNK_SIZE_U);
 const CHUNK_SIZE_F: f32 = f32(CHUNK_SIZE_I);
 const SCALE: f32 = 2048.0;
-const MOUNTAIN_HEIGHT: f32 = 128.0;
+const MOUNTAIN_HEIGHT: f32 = 9000.0;
 const SEA_LEVEL: i32 = 10;
 const DIRT_DEPTH: i32 = 4;
 
@@ -234,9 +234,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let wx = f32(cx * 32 + i32(x));
     let wz = f32(cz * 32 + i32(z));
 
-    let sc = scaling(wx, 0.0, wz);
-    let r = dw_fbm_value(sc, 1.0, seed);
-    let h = i32(round(r * MOUNTAIN_HEIGHT));
+    // let sc = scaling(wx, 0.0, wz);
+    // let r = dw_fbm_value(sc, 1.0, seed);
+    let h = get_height(wx, 0.0, wz, seed);
 
     let chunk_offset = chunk_idx * (CHUNK_SIZE_U * CHUNK_SIZE_U * CHUNK_SIZE_U);
 
@@ -275,7 +275,8 @@ fn hash(n: f32, seed: i32) -> f32 {
 }
 
 fn hash2d(p: vec2f, seed: i32) -> f32 {
-    var p3 = fract(vec3f(p.xyx) * 0.1031);
+    let p_seeded = p + vec2f(f32(seed) * 12.9898, f32(seed) * 78.233);
+    var p3 = fract(vec3f(p_seeded.xyx) * 0.1031);
     p3 += dot(p3, p3.yzx + 33.33);
     return fract((p3.x + p3.y) * p3.z);
 }
@@ -618,32 +619,56 @@ fn dw_fbm_value(sc: vec3f, amplitude: f32, seed: i32) -> f32 {
     return fbm(p.x, p.y, p.z, seed + 3, 4);
 }
 
-fn domain_warp_billow(x: f32, y: f32, z: f32, seed: i32) -> f32 {
-    let sx = x / SCALE;
-    let sy = y / SCALE;
-    let sz = z / SCALE;
+fn pink_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+    var sum = 0.0;
+    var amplitude = 0.5;
+    var frequency = 1.0;
+    var max_val = 0.0;
+    let lacunarity = 2.0;
+    let persistence = 0.5;
 
-    let amplitude = 1.0;
-    let dx = value_noise(sx, sy, sz, seed) * amplitude;
-    let dy = value_noise(sx, sy, sz, seed + 1) * amplitude;
-    let dz = value_noise(sx, sy, sz, seed + 2) * amplitude;
-
-    let p = vec3f(sx + dx, sy + dy, sz + dz);
-
-    return fbm(p.x, p.y, p.z, seed + 3, 4);
+    for (var i = 0u; i < 6u; i = i + 1u) {
+        let n = simplex_noise(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
+        sum += n * amplitude;
+        max_val += amplitude;
+        amplitude *= persistence;
+        frequency *= lacunarity;
+    }
+    return sum / max_val;
 }
 
-fn domain_warp_ridged(x: f32, y: f32, z: f32, seed: i32) -> f32 {
-    let sx = x / SCALE;
-    let sy = y / SCALE;
-    let sz = z / SCALE;
+fn blue_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+    let p = vec3f(x, y, z);
+    let white = hash3d(p, seed);
+    let low = value_noise(x, y, z, seed);
+    return clamp(white - low + 0.5, 0.0, 1.0);
+}
 
-    let amplitude = 1.0;
-    let dx = value_noise(sx, sy, sz, seed) * amplitude;
-    let dy = value_noise(sx, sy, sz, seed + 1) * amplitude;
-    let dz = value_noise(sx, sy, sz, seed + 2) * amplitude;
+fn bias(h: f32) -> f32 {
+    let b = 0.2;
+    return h / ((1.0/b-2.0)*(1.0-h)+1.0);
+}
 
-    let p = vec3f(sx + dx, sy + dy, sz + dz);
+fn get_height(x: f32, y: f32, z: f32, seed: i32) -> i32 {    
+    let sc = scaling(x, y, z);
+    let n = ridged(sc.x, 0.0, sc.z, seed, 2u);
+    let r = n * 100.0;
 
-    return fbm(p.x, p.y, p.z, seed + 3, 4);
+    return i32(round(r));
+    // let sc = scaling(x, 0.0, z);
+    // let n = simplex_noise(sc.x, 0.0, sc.z, seed);
+    // let sx = sc.x;
+    // let sz = sc.z;
+    // let o: u32 = u32(n * 10.0);
+
+    // var h: f32;
+    // if (n <= 0.2) {
+    //     h = value_noise(sx, 0.0, sz, seed);
+    // } else if (n <= 0.5) {
+    //     h = fbm(sx, 0.0, sz, seed, o);
+    // } else {
+    //     h = dw_fbm_value(sc, 1.0, seed);
+    // }
+
+    // return i32(round(h * (MOUNTAIN_HEIGHT*(bias(ridged(sx, 0.0, sz, seed, o+1))))));
 }

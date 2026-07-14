@@ -381,3 +381,51 @@ impl Compute {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use wgpu::{Instance, RequestAdapterOptions, PowerPreference, Limits, DeviceDescriptor};
+
+    #[test]
+    fn test_shader_compilation() {
+        pollster::block_on(async {
+            let instance = Instance::default();
+            let adapter = instance
+                .request_adapter(&RequestAdapterOptions {
+                    power_preference: PowerPreference::default(),
+                    compatible_surface: None,
+                    force_fallback_adapter: false,
+                })
+                .await
+                .expect("アダプター作成に失敗");
+
+            let (device, _queue) = adapter
+                .request_device(
+                    &DeviceDescriptor {
+                        label: None,
+                        required_features: wgpu::Features::empty(),
+                        required_limits: Limits::default(),
+                        memory_hints: Default::default(),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .expect("デバイス作成に失敗");
+
+            let _ = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Environment Shader Test"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("calc_env.wgsl").into()),
+            });
+
+            let _ = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Biome Shader Test"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("biome.wgsl").into()),
+            });
+
+            let _ = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Terrain Shader Test"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("terrain.wgsl").into()),
+            });
+        });
+    }
+}

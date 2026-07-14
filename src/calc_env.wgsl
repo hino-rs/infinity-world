@@ -13,7 +13,7 @@ const MAX_HEIGHT: f32 = 10000.0;
 const MIN_HEIGT: f32 = 0.0;
 const OCTAVES: u32 = 2;
 
-const SCALE: f32 = 2048.0;
+const SCALE: f32 = 4096.0;
 
 struct ChunkUniforms {
     chunk_pos: vec3i,
