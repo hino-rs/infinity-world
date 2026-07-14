@@ -4,7 +4,7 @@ use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferAddress, BufferBindingType, BufferDescriptor, BufferUsages, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device, MapMode, PipelineLayoutDescriptor, Queue, ShaderModuleDescriptor, ShaderSource, ShaderStages, util::{BufferInitDescriptor, DeviceExt}, wgt::CommandEncoderDescriptor,
 };
 
-use crate::{consts::{BATCH_SIZE, CHUNK_VOLUME, NUM_CHUNK_BLOCKS}, game::BlockType, terrain::ChunkBlocks};
+use crate::{consts::{BATCH_SIZE, NUM_CHUNK_BLOCKS}, game::BlockType, terrain::ChunkBlocks};
 
 
 
@@ -69,7 +69,7 @@ impl Compute {
     pub fn build_chunk_maker(
         device: &Device,
     ) -> (Buffer, Buffer, BindGroup, ComputePipeline, ComputePipeline, ComputePipeline, Buffer, Buffer, BufferAddress, Buffer) {
-        let init_chunk = vec![0; CHUNK_VOLUME * BATCH_SIZE];
+        let init_chunk = vec![0; NUM_CHUNK_BLOCKS * BATCH_SIZE];
         let size = (init_chunk.len() * std::mem::size_of::<u32>()) as BufferAddress;
 
         let blocks_storage_buffer = device.create_buffer_init(&BufferInitDescriptor {

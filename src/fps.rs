@@ -1,29 +1,26 @@
-#![allow(unused)]
-
 use web_time::Instant;
 use std::collections::VecDeque;
 
+/// FPS計測に必要な情報をまとめた構造体
 pub struct FpsCounter {
     pub last_frame: Instant,
-    pub frame_times: VecDeque<f64>, // 直近Nフレームの時間
+    pub frame_times: VecDeque<f64>,
     pub max_samples: usize,
     pub cached_fps: f64,
-    pub min_frame_time: f64,
-    pub max_frame_time: f64,
 }
 
 impl FpsCounter {
+    /// コンストラクタ。サンプル数を渡してください。
     pub fn new(samples: usize) -> Self {
         Self {
             last_frame: Instant::now(),
             frame_times: VecDeque::with_capacity(samples),
             max_samples: samples,
             cached_fps: 0.0,
-            min_frame_time: f64::MAX,
-            max_frame_time: 0.0,
         }
     }
 
+    /// 経過時間を計算してFPSを計算します。ループ毎1度だけ呼んでください。
     pub fn tick(&mut self) -> f64 {
         let now = Instant::now();
         let delta = now.duration_since(self.last_frame).as_secs_f64();
@@ -42,52 +39,11 @@ impl FpsCounter {
             0.0
         };
 
-        self.min_frame_time = self.min_frame_time.min(delta);
-        self.max_frame_time = self.max_frame_time.max(delta);
-
         delta
     }
 
+    /// キャッシュされたFPSを返します
     pub fn fps(&self) -> f64 {
         self.cached_fps
-    }
-
-    pub fn frame_time_ms(&self) -> f64 {
-        if let Some(&last) = self.frame_times.back() {
-            last * 1000.0
-        } else {
-            0.0
-        }
-    }
-
-    pub fn min_fps(&self) -> f64 {
-        if self.max_frame_time > 0.0 {
-            1.0 / self.max_frame_time
-        } else {
-            0.0
-        }
-    }
-
-    pub fn max_fps(&self) -> f64 {
-        if self.min_frame_time < f64::MAX {
-            1.0 / self.min_frame_time
-        } else {
-            0.0
-        }
-    }
-
-    pub fn reset_stats(&mut self) {
-        self.min_frame_time = f64::MAX;
-        self.max_frame_time = 0.0;
-    }
-
-    pub fn summary(&self) -> String {
-        format!(
-            "FPS: {:.1} | Frame: {:.2}ms | Min: {:.1} Max: {:.1}",
-            self.fps(),
-            self.frame_time_ms(),
-            self.min_fps(),
-            self.max_fps(),
-        )
     }
 }

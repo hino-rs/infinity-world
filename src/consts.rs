@@ -1,26 +1,26 @@
-// --- チャンク関係 ---
+/// チャンクの一辺のサイズ
 pub const CHUNK_SIZE: usize = 32;
+/// チャンクサイズ(i32)
 pub const CHUNK_SIZE_I32: i32 = CHUNK_SIZE as i32;
+/// チャンクサイズ(f32)
 pub const CHUNK_SIZE_F32: f32 = CHUNK_SIZE as f32;
-pub const CHUNK_SIZE_F64: f64 = CHUNK_SIZE as f64;
+/// チャンクの体積(ブロック数)
 pub const NUM_CHUNK_BLOCKS: usize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
-pub const X_STRIDE: usize = CHUNK_SIZE;
-pub const Y_STRIDE: usize = CHUNK_SIZE * CHUNK_SIZE;
-pub const Z_STRIDE: usize = 1;
-pub const CHUNK_VOLUME: usize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
-pub const SEA_LEVEL: usize = 10; // 平均的な地表
-pub const DIRT_DEPTH: i32 = 4;
-// pub const MAX_MOUNTAIN_HEIGHT: f64 = MAX_HEIGHT as f64;
-pub const MAX_HEIGHT: i32 = 1024;
+/// 追加するチャンクの最大保留数
 pub const CHANK_GEN_MAX_PENDING: usize = 128;
+/// コンピュートのバッチサイズ
 pub const BATCH_SIZE: usize = 16;
-
-// --- プレイヤー関係 ---
+/// プレイヤーの素の歩行速度
 pub const PLAYER_WALK_SPEED: f32 = 6.0;
-pub const RADIUS: i32 = 128; // // プレイヤーを中心としたチャンク生成対象の半径
+/// 描画距離(横)
+pub const RADIUS: i32 = 128;
+/// 描画距離(縦)
 pub const Y_RADIUS: i32 = 8;
-pub const PLAYER_HALF_WIDTH: f32 = 0.3; // 横幅の半分（全幅 0.6）
-pub const PLAYER_HEIGHT: f32 = 1.8; // 身長（足元から目まで）
+/// プレイヤーの横幅の半分
+pub const PLAYER_HALF_WIDTH: f32 = 0.3;
+/// 身長(足元から目まで)
+pub const PLAYER_HEIGHT: f32 = 1.8;
+/// 視野角
 pub const FOV: f32 =70.0;
-pub const Z_FAR: f32 = 10000000.0;
+/// 描画対象の最短距離
 pub const Z_NEAR: f32 = 0.1;

@@ -20,58 +20,6 @@ pub struct AabbFull {
     pub max_z: f32,
 }
 
-impl Aabb {
-    pub fn compress(full: AabbFull) -> Aabb {
-        Aabb {
-            first: Vec3::new(full.min_x, full.max_y, full.max_z),
-            end: Vec3::new(full.max_x, full.min_y, full.min_z),
-        }
-    }
-
-    pub fn decompress(aabb: Aabb) -> AabbFull {
-        let x1 = aabb.first.x;
-        let x2 = aabb.end.x;
-        let y1 = aabb.first.y;
-        let y2 = aabb.end.y;
-        let z1 = aabb.first.z;
-        let z2 = aabb.end.z;
-
-        AabbFull {
-            min_x: x1.min(x2),
-            max_x: x1.max(x2),
-            min_y: y1.min(y2),
-            max_y: y1.max(y2),
-            min_z: z1.min(z2),
-            max_z: z1.max(z2),
-        }
-    }
-
-    pub fn new(pos: Vec3) -> Self {
-        let x1 = pos.x - PLAYER_HALF_WIDTH;
-        let x2 = pos.x + PLAYER_HALF_WIDTH;
-        let y1 = pos.y - PLAYER_HEIGHT;
-        let y2 = pos.y;
-        let z1 = pos.z - PLAYER_HALF_WIDTH;
-        let z2 = pos.z + PLAYER_HALF_WIDTH;
-
-        let min_x = x1.min(x2);
-        let max_x = x1.max(x2);
-        let min_y = y1.min(y2);
-        let max_y = y1.max(y2);
-        let min_z = z1.min(z2);
-        let max_z = z1.max(z2);
-
-        Aabb::compress(AabbFull {
-            min_x,
-            max_x,
-            min_y,
-            max_y,
-            min_z,
-            max_z,
-        })
-    }
-}
-
 pub struct Player {
     pub position: Vec3,
     velocity_y: f32,
@@ -115,7 +63,7 @@ impl Player {
         IVec3::new(cx, cy, cz)
     }
 
-    pub fn aabb(&self) -> Aabb {
+    pub fn get_aabb(&self) -> Aabb {
         let min_x = self.position.x - PLAYER_HALF_WIDTH;
         let max_x = self.position.x + PLAYER_HALF_WIDTH;
 
@@ -125,48 +73,58 @@ impl Player {
         let min_z = self.position.z - PLAYER_HALF_WIDTH;
         let max_z = self.position.z + PLAYER_HALF_WIDTH;
 
-        Aabb::compress(AabbFull {
-            min_x,
-            max_x,
-            min_y,
-            max_y,
-            min_z,
-            max_z,
-        })
+        Aabb {
+            first: Vec3::new(min_x, max_y, max_z),
+            end: Vec3::new(max_x, min_y, min_z),
+        }
+    }
+
+    pub fn get_aabb_full(&self) -> AabbFull {
+        let aabb = self.get_aabb();
+        let x1 = aabb.first.x;
+        let x2 = aabb.end.x;
+        let y1 = aabb.first.y;
+        let y2 = aabb.end.y;
+        let z1 = aabb.first.z;
+        let z2 = aabb.end.z;
+
+        AabbFull {
+            min_x: x1.min(x2),
+            max_x: x1.max(x2),
+            min_y: y1.min(y2),
+            max_y: y1.max(y2),
+            min_z: z1.min(z2),
+            max_z: z1.max(z2),
+        }
     }
 
     pub fn move_player(&mut self, delta: Vec3, terrain: &Terrain) -> bool {
         let mut on_ground = false;
         // --- X軸（壁判定・横） ---
-        let mut try_pos = self.position;
-        try_pos.x += delta.x;
-        if terrain.collides_at(Aabb::new(try_pos)) {
-            // 壁にぶつかった
-        } else {
-            self.position.x = try_pos.x;
+        let tmp = self.position.x;
+        self.position.x += delta.x;
+        if terrain.collides_at(&self.get_aabb_full()) {
+            self.position.x = tmp;
         }
 
         // --- Z軸（壁判定・奥行き） ---
-        let mut try_pos = self.position;
-        try_pos.z += delta.z;
-        if terrain.collides_at(Aabb::new(try_pos)) {
-            // Z の移動を捨てる
-        } else {
-            self.position.z = try_pos.z;
+        let tmp = self.position.z;
+        self.position.z += delta.z;
+        if terrain.collides_at(&self.get_aabb_full()) {
+            self.position.z = tmp;
         }
 
         // --- Y軸（地面・天井） ---
-        let mut try_pos = self.position;
-        try_pos.y += delta.y;
-        if terrain.collides_at(Aabb::new(try_pos)) {
+        let tmp = self.position.y;
+        self.position.y += delta.y;
+        if terrain.collides_at(&self.get_aabb_full()) {
+            self.position.y = tmp;
             // 縦にぶつかった
             if delta.y < 0.0 {
                 on_ground = true; // 下向きで衝突 → 着地
             }
             // 上向きで衝突なら頭をぶつけた。いずれも縦速度を0へ
             self.velocity_y = 0.0;
-        } else {
-            self.position.y = try_pos.y;
         }
 
         on_ground
@@ -176,18 +134,18 @@ impl Player {
 impl PlayerController {
     // 入力と重力から、このフレームの移動量を計算して返す。
     pub fn compute_move(&mut self, player: &mut Player, camera: &Camera, dt: f32) -> Vec3 {
+        // Tボタンが押されていたら上空へ 
         if self.teleport {
-            player.position.x = 0.0;
-            player.position.z = 0.0;
-            player.position.y = 300.0;
+            player.position.y = 500.0;
             return Vec3::ZERO;
         }
 
-        // 地面に水平な前方・右方向（XZ平面）
+        // 地面に水平な前方・右方向
         let (sin_yaw, cos_yaw) = camera.yaw.sin_cos();
         let forward_ground = Vec3::new(sin_yaw, 0.0, -cos_yaw).normalize();
         let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize();
 
+        // ダッシュボタン(長押しで加速していく)
         self.speed = if self.is_dash_pressed {
             self.speed = (self.speed * 1.05).min(250.0);
             self.speed
@@ -195,6 +153,7 @@ impl PlayerController {
             PLAYER_WALK_SPEED
         };
 
+        // WASD・↑←↓→
         let mut move_dir = Vec3::ZERO;
         if self.is_forward_pressed {
             move_dir += forward_ground;

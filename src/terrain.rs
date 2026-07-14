@@ -9,6 +9,7 @@ use crate::camera::Camera;
 use crate::chunk::Rle;
 use crate::compute::{ChunkUniforms, Compute};
 use crate::game::BlockType::Air;
+use crate::player::{AabbFull, Player};
 use crate::{chunk, create_terrain};
 use crate::{consts::*, game::BlockType, player::Aabb};
 
@@ -352,9 +353,7 @@ impl Terrain {
     }
 
     // プレイヤーAABBが地形と重なっているか
-    pub fn collides_at(&self, aabb: Aabb) -> bool {
-        let aabb = Aabb::decompress(aabb);
-
+    pub fn collides_at(&self, aabb: &AabbFull) -> bool {
         // --- AABBが触れうるブロックセルの範囲を求める ---
         let x0 = (aabb.min_x + 0.5).floor() as i32;
         let x1 = (aabb.max_x + 0.5).floor() as i32;

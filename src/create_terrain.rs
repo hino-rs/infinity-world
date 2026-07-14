@@ -69,19 +69,6 @@ pub fn calc_ao(side1: bool, side2: bool, corner: bool) -> u8 {
     3 - (side1 as u8 + side2 as u8 + corner as u8)
 }
 
-/// 1列分の地表の高さを2Dで決める
-pub fn _surface_height(wx: f64, wz: f64, seed: u32) -> i32 {
-    // 平地の起伏
-    let hills = get_fbm(wx / 80.0, 0.0, wz / 80.0, seed, 4) * 6.0;
-
-    // 山岳
-    let n = get_fbm(wx / 220.0, 0.0, wz / 220.0, seed + 1, 5);
-    let ridge = (1.0 - n.abs()).powi(3);
-    let mask = (get_fbm(wx / 500.0, 0.0, wz / 500.0, seed + 2, 2) * 0.5 /*ここからの数値が高いほど山が多くなる*/ + 0.2 - 0.0).max(0.0);
-    let mountains = ridge * mask * 100000.0;
-
-    (SEA_LEVEL as f64 + hills + mountains).round() as i32
-}
 
 /// 周辺ブロックが不透明ブロックかどうかを調べる。
 /// チャンク外は空気(非ソリッド)とみなす。
