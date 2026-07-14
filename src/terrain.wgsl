@@ -1,7 +1,7 @@
 const CHUNK_SIZE_U: u32 = 32;
 const CHUNK_SIZE_I: i32 = i32(CHUNK_SIZE_U);
 const CHUNK_SIZE_F: f32 = f32(CHUNK_SIZE_I);
-const SCALE: f32 = 1024.0;
+const SCALE: f32 = 2048.0;
 const MOUNTAIN_HEIGHT: f32 = 128.0;
 const SEA_LEVEL: i32 = 10;
 const DIRT_DEPTH: i32 = 4;
@@ -15,37 +15,201 @@ struct ChunkUniforms {
 @group(0) @binding(1) var<storage, read_write> blocks: array<u32>;
 @group(0) @binding(2) var<storage, read_write> env_data: array<u32>;
 
-struct Biome {
-    temp: f32,
-    humid: f32,
-    block_id: u32,
+
+fn calc_humidity(mois: f32, temp: f32) -> vec2f {
+    // 相対温度
+    let rh = mois * 100.0;
+    
+    // 飽和水蒸気圧
+    var es = 0.0f;
+    if temp >= 0.0 {
+        es = 6.1078 * pow(10.0, (7.5 * temp) / (temp + 237.3));
+    } else {
+        es = 6.1078 * pow(10.0, (9.5 * temp) / (temp + 265.5));
+    }
+
+    // 現在の水蒸気圧
+    let e = es * (rh / 100.0);
+
+    // 絶対湿度
+    let ah = 217.0 * e / (temp + 273.15);
+
+    return vec2f(rh, ah);
 }
 
-const BIOME_COUNT = 5u;
-const BIOMES = array<Biome, 5>(
-    Biome(25.0, 82.5, 67), // 熱帯雨林
-    Biome(22.5, 25.0, 7), // 熱帯
-    Biome(12.5, 67.5, 3), // 温帯
-    Biome(0.0, 75.0, 61), // 亜寒帯
-    Biome(-10.0, 82.5, 103), // 極寒
+struct Biome {
+    temp: f32,
+    mois: f32,
+}
+
+struct BiomeBlockType {
+    Af: array<u32, 2>,
+    Am: array<u32, 2>,
+    Aw: array<u32, 4>,
+    BW: array<u32, 4>,
+    BS: array<u32, 3>,
+    Cfa: array<u32, 2>,
+    Cfb: array<u32, 1>,
+    Cs: array<u32, 2>,
+    Cw: array<u32, 2>,
+    Df: array<u32, 2>,
+    Dw: array<u32, 2>,
+    Ds: array<u32, 2>,
+    ET: array<u32, 2>,
+    EF: array<u32, 1>,
+}
+
+const BIOME_BLOCK_TYPES = BiomeBlockType(
+    // Af: ラトソル, 赤黄色土
+    array<u32, 2>(67u, 68u),
+    // Am: ラトソル, 赤黄色土
+    array<u32, 2>(67u, 68u),
+    // Aw: ラトソル, 赤黄色土, レグール土, テラローシャ
+    array<u32, 4>(67u, 68u, 69u, 70u),
+
+    // BW: 砂漠土・砂・礫・岩石
+    array<u32, 4>(65u, 4u, 120u, 1u),
+    // BS: チェルノーゼム, プレーリー土, 栗色土
+    array<u32, 3>(71u, 72u, 73u),
+
+    // Cfa: 褐色森林土, 赤黄色土
+    array<u32, 2>(74u, 68u),
+    // Cfb: 褐色森林土
+    array<u32, 1>(74u),
+    // Cs: テラロッサ, 褐色森林土
+    array<u32, 2>(75u, 74u),
+    // Cw: 赤黄色土, 褐色森林土
+    array<u32, 2>(68u, 74u),
+
+    // Df: ポトゾル・永久凍土(地下)
+    array<u32, 2>(61u, 66u),
+    // Dw: ポトゾル・永久凍土(地下)
+    array<u32, 2>(61u, 66u),
+    // Ds: ポトゾル, 高山土壌(高いところ)
+    array<u32, 2>(61u, 76u),
+
+    // ET: ツンドラ土, 永久凍土(地下)
+    array<u32, 2>(77u, 66u),
+    // EF: 氷
+    array<u32, 1>(101u),
+);
+
+const BIOME_COUNT = 14u;
+const BIOMES = array<Biome, 14>(
+    Biome(27.0, 0.95),  // Af (熱帯雨林)
+    Biome(26.5, 0.89),  // Am (熱帯モンスーン)
+    Biome(26.0, 0.70),  // Aw (サバナ)
+    Biome(22.5, 0.20),  // BW (砂漠)
+    Biome(18.5, 0.30),  // BS (ステップ)
+    Biome(16.5, 0.48),  // Cfa (温暖湿潤)
+    Biome(11.0, 0.36),  // Cfb (西岸海洋性)
+    Biome(16.0, 0.39),  // Cs (地中海性)
+    Biome(19.0, 0.52),  // Cw (温暖冬季少雨)
+    Biome(3.5, 0.23),   // Df (亜寒帯湿潤)
+    Biome(-1.5, 0.16),  // Dw (亜寒帯冬季少雨)
+    Biome(5.0, 0.20),   // Ds (高山)
+    Biome(-4.0, 0.10),  // ET (ツンドラ)
+    Biome(-22.5, 0.02), // EF (氷雪)
 );
 
 fn get_biome_id(t: f32, h: f32) -> u32 {
     var min_distance = 9999.0;
-    var closest_id = 0u;
+    var closest_idx = 0u;
 
     for (var i = 0u; i < BIOME_COUNT; i = i + 1u) {
         var b = BIOMES[i];
         let dt = b.temp - t;
-        let dh = b.humid - h;
+        let dh = b.mois - h;
         let distance = dt*dt + dh*dh;
 
         if (distance < min_distance) {
             min_distance = distance;
-            closest_id = b.block_id;
+            closest_idx = i;
         }
     }
-    return closest_id;
+    return closest_idx;
+}
+
+fn get_biome_block(biome_idx: u32, depth: i32, wx: f32, wz: f32, seed: i32) -> u32 {
+    if (depth >= DIRT_DEPTH) {
+        return 1u; // Stone
+    }
+
+    let n = hash2d(vec2f(wx, wz), seed);
+
+    switch (biome_idx) {
+        case 0u: { // Af
+            if (depth == 0) { return BIOME_BLOCK_TYPES.Af[0]; }
+            else { return BIOME_BLOCK_TYPES.Af[1]; }
+        }
+        case 1u: { // Am
+            if (depth == 0) { return BIOME_BLOCK_TYPES.Am[0]; }
+            else { return BIOME_BLOCK_TYPES.Am[1]; }
+        }
+        case 2u: { // Aw
+            if (depth == 0) {
+                if (n < 0.5) { return BIOME_BLOCK_TYPES.Aw[0]; }
+                else { return BIOME_BLOCK_TYPES.Aw[2]; }
+            } else {
+                if (n < 0.5) { return BIOME_BLOCK_TYPES.Aw[1]; }
+                else { return BIOME_BLOCK_TYPES.Aw[3]; }
+            }
+        }
+        case 3u: { // BW
+            if (depth == 0) {
+                if (n < 0.7) { return BIOME_BLOCK_TYPES.BW[1]; }
+                else { return BIOME_BLOCK_TYPES.BW[0]; }
+            } else {
+                if (n < 0.6) { return BIOME_BLOCK_TYPES.BW[2]; }
+                else { return BIOME_BLOCK_TYPES.BW[3]; }
+            }
+        }
+        case 4u: { // BS
+            if (depth == 0) {
+                if (n < 0.5) { return BIOME_BLOCK_TYPES.BS[0]; }
+                else { return BIOME_BLOCK_TYPES.BS[1]; }
+            } else {
+                return BIOME_BLOCK_TYPES.BS[2];
+            }
+        }
+        case 5u: { // Cfa
+            if (depth == 0) { return BIOME_BLOCK_TYPES.Cfa[0]; }
+            else { return BIOME_BLOCK_TYPES.Cfa[1]; }
+        }
+        case 6u: { // Cfb
+            return BIOME_BLOCK_TYPES.Cfb[0];
+        }
+        case 7u: { // Cs
+            if (depth == 0) { return BIOME_BLOCK_TYPES.Cs[0]; }
+            else { return BIOME_BLOCK_TYPES.Cs[1]; }
+        }
+        case 8u: { // Cw
+            if (depth == 0) { return BIOME_BLOCK_TYPES.Cw[0]; }
+            else { return BIOME_BLOCK_TYPES.Cw[1]; }
+        }
+        case 9u: { // Df
+            if (depth < 2) { return BIOME_BLOCK_TYPES.Df[0]; }
+            else { return BIOME_BLOCK_TYPES.Df[1]; }
+        }
+        case 10u: { // Dw
+            if (depth < 2) { return BIOME_BLOCK_TYPES.Dw[0]; }
+            else { return BIOME_BLOCK_TYPES.Dw[1]; }
+        }
+        case 11u: { // Ds
+            if (depth == 0) { return BIOME_BLOCK_TYPES.Ds[1]; }
+            else { return BIOME_BLOCK_TYPES.Ds[0]; }
+        }
+        case 12u: { // ET
+            if (depth < 2) { return BIOME_BLOCK_TYPES.ET[0]; }
+            else { return BIOME_BLOCK_TYPES.ET[1]; }
+        }
+        case 13u: { // EF
+            return BIOME_BLOCK_TYPES.EF[0];
+        }
+        default: {
+            return 1u; // Stone
+        }
+    }
 }
 
 // ===================================================================
@@ -70,7 +234,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let wx = f32(cx * 32 + i32(x));
     let wz = f32(cz * 32 + i32(z));
 
-    let r = domain_warp(wx, 0.0, wz, seed);
+    let sc = scaling(wx, 0.0, wz);
+    let r = dw_fbm_value(sc, 1.0, seed);
     let h = i32(round(r * MOUNTAIN_HEIGHT));
 
     let chunk_offset = chunk_idx * (CHUNK_SIZE_U * CHUNK_SIZE_U * CHUNK_SIZE_U);
@@ -79,43 +244,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         let wy = uniforms[chunk_idx].chunk_pos.y * CHUNK_SIZE_I + i32(y);
         let index = chunk_offset + y * (CHUNK_SIZE_U * CHUNK_SIZE_U) + x * CHUNK_SIZE_U + z;
 
-        // x: 気温, y: 湿度%
+        // x: 気温(-90℃~150℃), y: 湿潤度(0.0~1.0)
         let env = unpack2x16float(env_data[index]);
 
         if (wy <= h) {
-            blocks[index] = get_biome_id(env.x, env.y);
-            
-            // if wy == h {
-            //     if h > 45 {
-            //         // blocks[index] = 1u;
-            //         if env.x < 21.0 {
-            //             blocks[index] = 1u;
-            //         } else {
-            //             blocks[index] = 1u;
-            //         }
-            //     } else {
-            //         // blocks[index] = 3u;
-            //         if env.x < 21.0 {
-            //             blocks[index] = 1u;
-            //         } else {
-            //             blocks[index] = 1u;
-            //         }
-            //     }
-            // } else if wy >= h - DIRT_DEPTH {
-            //     // blocks[index] = 2u;
-            //     if env.x < 21.0 {
-            //         blocks[index] = 1u;
-            //     } else {
-            //         blocks[index] = 1u;
-            //     }
-            // } else {
-            //     // blocks[index] = 1u;
-            //     if env.x < 21.0 {
-            //         blocks[index] = 1u;
-            //     } else {
-            //         blocks[index] = 1u;
-            //     }
-            // }
+            let biome_idx = get_biome_id(env.x, env.y);
+            let depth = h - wy;
+            blocks[index] = get_biome_block(biome_idx, depth, wx, wz, seed);
         } else if wy < SEA_LEVEL {
             blocks[index] = 100u;
         } else {
@@ -123,17 +258,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         }
     }
 }
-
-// ===================================================================
-// バイオームシステム
-// マインクラフトのようにバイオームの直接的な分布はせず、
-// 気温・湿度・降水量・風量・地質・岩石の性質・地下水・土壌・植生や、
-// 日射量といった要素を分布させ、結果的なバイオームを作りたい。
-// ブロックをそれらに依存させるなら、斜面の傾斜角も考慮したい。
-// ===================================================================
-fn biome(x: f32, y: f32, z: f32, seed: i32) {
-}
-
 
 
 // =======================================================
@@ -475,7 +599,26 @@ fn ridged(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
 // =======================================================
 // ドメインワーピング
 // =======================================================
-fn domain_warp(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+
+fn scaling(x: f32, y: f32, z: f32) -> vec3f {
+    let sx = x / SCALE;
+    let sy = y / SCALE;
+    let sz = z / SCALE;
+
+    return vec3f(sx, sy, sz);
+}
+
+fn dw_fbm_value(sc: vec3f, amplitude: f32, seed: i32) -> f32 {
+    let dx = value_noise(sc.x, sc.y, sc.z, seed) * amplitude;
+    let dy = value_noise(sc.x, sc.y, sc.z, seed + 1) * amplitude;
+    let dz = value_noise(sc.x, sc.y, sc.z, seed + 2) * amplitude;
+
+    let p = vec3f(sc.x + dx, sc.y + dy, sc.z + dz);
+
+    return fbm(p.x, p.y, p.z, seed + 3, 4);
+}
+
+fn domain_warp_billow(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     let sx = x / SCALE;
     let sy = y / SCALE;
     let sz = z / SCALE;
@@ -487,7 +630,20 @@ fn domain_warp(x: f32, y: f32, z: f32, seed: i32) -> f32 {
 
     let p = vec3f(sx + dx, sy + dy, sz + dz);
 
-    // return fbm(p.x, p.y, p.z, seed + 3, 4);
-    // return billow(p.x, p.y, p.z, seed + 3, 4);
+    return fbm(p.x, p.y, p.z, seed + 3, 4);
+}
+
+fn domain_warp_ridged(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+    let sx = x / SCALE;
+    let sy = y / SCALE;
+    let sz = z / SCALE;
+
+    let amplitude = 1.0;
+    let dx = value_noise(sx, sy, sz, seed) * amplitude;
+    let dy = value_noise(sx, sy, sz, seed + 1) * amplitude;
+    let dz = value_noise(sx, sy, sz, seed + 2) * amplitude;
+
+    let p = vec3f(sx + dx, sy + dy, sz + dz);
+
     return fbm(p.x, p.y, p.z, seed + 3, 4);
 }

@@ -25,14 +25,24 @@ pub enum BlockType {
     Bedrock   = 28, // 岩盤
 
     // --- 土壌・地表被覆系: 60~ ---
-    Moss         = 60,
-    Podzol       = 61, // ポドゾル
-    Mud          = 62,
-    Peat         = 63, // 泥灰
-    Ash          = 64, // 火山灰土
-    CrackedEarth = 65, // 乾裂土
-    Permafrost   = 66, // 永久凍土
-    Latosol      = 67, // 酸性の赤土
+    Moss            = 60,
+    Podzol          = 61, // ポドゾル
+    Mud             = 62,
+    Peat            = 63, // 泥灰
+    Ash             = 64, // 火山灰土
+    CrackedEarth    = 65, // 乾裂土
+    Permafrost      = 66, // 永久凍土
+    Latosol         = 67, // 酸性の赤土
+    RedYellowSoil   = 68, // 赤黄色土
+    Regur           = 69, // レグール土
+    TerraRoxa       = 70, // テラローシャ
+    Chernozem       = 71, // チェルノーゼム
+    PrairieSoil     = 72, // プレーリー土
+    ChestnutSoil    = 73, // 栗色土
+    BrownForestSoil = 74, // 褐色森林土
+    TerraRossa      = 75, // テラロッサ
+    AlpineSoil      = 76, // 高山土壌
+    TundraSoil      = 77, // ツンドラ土
 
     // --- 水・氷・溶岩: 100~ ---
     Water     = 100,

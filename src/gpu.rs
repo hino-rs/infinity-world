@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use winit::window::Window;
 
-use crate::{camera::{Camera, CameraGpu}, fps::FpsCounter, pipeline::PipelineRegistry, render_info::RenderInfo, terrain::Terrain};
+use crate::{camera::{Camera, CameraGpu}, fps::FpsCounter, pipeline::PipelineRegistry, render_info::RenderInfo, terrain::Terrain, utils::calc_humidity};
 
 use wgpu_text::{
     TextBrush,
@@ -111,7 +111,7 @@ impl GpuContext {
         fps: &FpsCounter,
         brush: &mut TextBrush<FontArc>,
         temp: f32,
-        humid: f32,
+        mois: f32,
     ) {
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
@@ -251,7 +251,8 @@ impl GpuContext {
         let fps_text = format!("FPS: {:.0}", &fps.fps());
         let coord = camera.xyz();
         let coord_text = format!("{:.0}, {:.0}, {:.0}", coord.0, coord.1, coord.2);
-        let env_text = format!("気温: {:.1}, 湿度: {:.2}", temp, humid);
+        let env_data = calc_humidity(mois, temp);
+        let env_text = format!("気温: {:.1}, 湿潤度: {:.1} 相対湿度: {:.1}, 絶対湿度: {:.1}", temp, mois, env_data.0, env_data.1);
 
         let fps_section = TextSection::default()
             .add_text(

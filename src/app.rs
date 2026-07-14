@@ -199,7 +199,7 @@ impl ApplicationHandler for Application {
                     compute.update(&gpu.device, &gpu.queue, &chunk_uniforms);
 
                     let mut current_temp = 0.0;
-                    let mut current_humid = 0.0;
+                    let mut current_mois = 0.0;
                     if let Some(envs) = compute.get_env(&gpu.device) {
                         let player_block_pos = world.player.position.as_ivec3();
                         let lx = player_block_pos.x.rem_euclid(32) as usize;
@@ -209,9 +209,9 @@ impl ApplicationHandler for Application {
                         if index < envs[0].len() {
                             let packed = envs[0][index];
                             let temp_bits = (packed & 0xffff) as u16;
-                            let humid_bits = ((packed >> 16) & 0xffff) as u16;
+                            let mois_bits = ((packed >> 16) & 0xffff) as u16;
                             current_temp = f16::from_bits(temp_bits).to_f32();
-                            current_humid = f16::from_bits(humid_bits).to_f32();
+                            current_mois = f16::from_bits(mois_bits).to_f32();
                         }
                     }
 
@@ -224,7 +224,7 @@ impl ApplicationHandler for Application {
                         &self.fps,
                         brush,
                         current_temp,
-                        current_humid,
+                        current_mois,
                     );
                     window.request_redraw();
                 }

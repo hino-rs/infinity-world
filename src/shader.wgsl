@@ -76,6 +76,16 @@ fn vs_main(
         case 65u:   { base_color = vec4f(0.65, 0.48, 0.33, 1.0); }    // CrackedEarth
         case 66u:   { base_color = vec4f(0.40, 0.45, 0.50, 1.0); }    // Permafrost
         case 67u:   { base_color = vec4f(0.71, 0.44, 0.42, 1.0); }
+        case 68u:   { base_color = vec4f(0.76, 0.52, 0.35, 1.0); }    // RedYellowSoil
+        case 69u:   { base_color = vec4f(0.18, 0.18, 0.20, 1.0); }    // Regur
+        case 70u:   { base_color = vec4f(0.50, 0.28, 0.22, 1.0); }    // TerraRoxa
+        case 71u:   { base_color = vec4f(0.16, 0.14, 0.12, 1.0); }    // Chernozem
+        case 72u:   { base_color = vec4f(0.26, 0.20, 0.15, 1.0); }    // PrairieSoil
+        case 73u:   { base_color = vec4f(0.48, 0.36, 0.24, 1.0); }    // ChestnutSoil
+        case 74u:   { base_color = vec4f(0.42, 0.28, 0.18, 1.0); }    // BrownForestSoil
+        case 75u:   { base_color = vec4f(0.68, 0.36, 0.26, 1.0); }    // TerraRossa
+        case 76u:   { base_color = vec4f(0.52, 0.50, 0.46, 1.0); }    // AlpineSoil
+        case 77u:   { base_color = vec4f(0.32, 0.36, 0.34, 1.0); }    // TundraSoil
 
         // --- 水・凍り・溶岩 ---
         case 100u:  { base_color = vec4f(0.15, 0.45, 0.80, 0.6); }    // Water

@@ -13,7 +13,7 @@ const MAX_HEIGHT: f32 = 10000.0;
 const MIN_HEIGT: f32 = 0.0;
 const OCTAVES: u32 = 2;
 
-const SCALE: f32 = 1024.0;
+const SCALE: f32 = 2048.0;
 
 struct ChunkUniforms {
     chunk_pos: vec3i,
@@ -22,6 +22,7 @@ struct ChunkUniforms {
 
 @group(0) @binding(0) var<storage, read> uniforms: array<ChunkUniforms>;
 @group(0) @binding(2) var<storage, read_write> env_data: array<u32>;
+
 
 fn calc_saturated_water(temp: f32) -> f32 {
     let t = clamp(temp, -50.0, 50.0);
@@ -54,22 +55,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     var sealevel_temperature = fbm(sx, 0.0, sz, seed + 5);
     // -90.0~150.0に拡大しつつ、平均は15.0になるようにする
     sealevel_temperature = -90.0 + 150.0 * pow(sealevel_temperature, 0.4286);
-    // 水蒸気量
-    var water = fbm(sx, 0.0, sz, seed - 5);
-    // ~40.0に拡大しつつ、2.5と18.5に最頻値を傾けさせる
-    if water < 0.5 {
-        let t = water / 0.5;
-        let t0 = 2.5 / 10.0;
-        let denom = pow((1.0 - t0), 3) + pow(t0, 3);
-        let g = (pow((t - t0), 3) + pow(t0, 3)) / denom;
-        water = 10.0 * g;
-    } else {
-        let t = (water - 0.5) / 0.5;
-        let t0 = (18.5 - 10.0) / 30.0;
-        let denom = pow((1.0 - t0), 3) + pow(t0, 3);
-        let g = (pow((t - t0), 3) + pow(t0, 3)) / denom;
-        water = 10.0 * (30.0 * g);
-    }
+    // 湿潤度
+    var moisture = fbm(sx, 0.0, sz, seed - 5);
 
     let chunk_offset = chunk_idx * (CHUNK_SIZE_U * CHUNK_SIZE_U * CHUNK_SIZE_U);
 
@@ -79,11 +66,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
 
         // 気温 = 海面(100)気温 - 0.65 * 海面からの高さ / 100.0
         let temperature = sealevel_temperature - 0.65 * f32(max(wy - SEA_LEVEL, 1)) / 100.0;
-        // 湿度% = 水蒸気量 / (疑似)飽和水蒸気量
-        let saturated_water = calc_saturated_water(temperature);
-        let humidity = clamp((water / saturated_water) * 100.0, 0.0, 100.0);
 
-        env_data[index] = pack2x16float(vec2f(temperature, humidity));
+        env_data[index] = pack2x16float(vec2f(temperature, moisture));
     }
 }
 
