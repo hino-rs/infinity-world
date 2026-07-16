@@ -5,13 +5,6 @@ struct CameraUniform {
 };
 @group(1) @binding(0) var<uniform> camera: CameraUniform;
 
-@group(2) @binding(0) var<storage, read> blocks: array<u32>;
-
-fn get_block_at(lx: u32, ly: u32, lz: u32) -> u32 {
-    let index = lx * 2048u + ly * 16u + lz;
-    return blocks[index];
-}
-
 struct GeneralUniforms {
     time: f32,
 };

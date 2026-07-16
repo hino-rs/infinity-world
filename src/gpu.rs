@@ -189,7 +189,6 @@ impl GpuContext {
                     render_pass
                         .set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                     
-                    render_pass.set_bind_group(2, &chunk.bind_group, &[]);
                     render_pass.draw_indexed(0..chunk.num_indices, 0, 0..1);
                 }
             }
@@ -255,6 +254,7 @@ impl GpuContext {
         let coord_text = format!("{:.0}, {:.0}, {:.0}", coord.0, coord.1, coord.2);
         let env_data = calc_humidity(mois, temp);
         let env_text = format!("気温: {:.1}, 湿潤度: {:.1} 相対湿度: {:.1}, 絶対湿度: {:.1}", temp, mois, env_data.0, env_data.1);
+        let num_added_chunks_text = format!("追加済みチャンク数: {}", terrain.chunks.len());
 
         let fps_section = TextSection::default()
             .add_text(
@@ -280,8 +280,16 @@ impl GpuContext {
             )
             .with_screen_position((10.0, 50.0));
 
+        let num_added_chunks = TextSection::default()
+            .add_text(
+                Text::new(&num_added_chunks_text)
+                    .with_scale(20.0)
+                    .with_color([0.0, 0.0, 0.0, 1.0])
+            )
+            .with_screen_position((10.0, 70.0));
+
         brush
-            .queue(&self.device, &self.queue, [&fps_section, &coord_section, &env_section])
+            .queue(&self.device, &self.queue, [&fps_section, &coord_section, &env_section, &num_added_chunks])
             .unwrap();
 
         {

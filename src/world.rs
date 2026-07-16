@@ -54,14 +54,12 @@ impl World {
     /// 
     /// 1. 経過時間の差分
     /// 2. &wgpu::Device
-    /// 3. ブロック用ストレージのレイアウト
-    /// 4. &Compute
-    /// 5. &Queue
+    /// 3. &Compute
+    /// 4. &Queue
     pub fn update(
         &mut self,
         dt: f32,
         device: &wgpu::Device,
-        storage_layout: &wgpu::BindGroupLayout,
         compute: &Compute,
         queue: &Queue,
     ) {
@@ -87,7 +85,6 @@ impl World {
             device,
             self.seed,
             player_pos,
-            storage_layout,
             &self.camera,
             compute,
             queue,

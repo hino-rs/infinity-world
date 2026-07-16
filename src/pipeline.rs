@@ -3,7 +3,6 @@ use wgpu::util::DeviceExt;
 pub struct PipelineRegistry {
     pub general_uniform_bind_group_layout: wgpu::BindGroupLayout,
     pub camera_uniform_bind_group_layout: wgpu::BindGroupLayout,
-    pub storage_bind_group_layout: wgpu::BindGroupLayout,
     pub general_uniform_buffer: wgpu::Buffer,
 
     pub general_uniform_bind_group: wgpu::BindGroup,
@@ -58,27 +57,12 @@ impl PipelineRegistry {
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
-        let storage_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Storage Bind Group Layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
-
         let render_pipeline_layout = 
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
                     Some(&general_uniform_bind_group_layout),
-                    Some(&camera_uniform_bind_group_layout), 
-                    Some(&storage_bind_group_layout),
+                    Some(&camera_uniform_bind_group_layout),
                 ],
                 immediate_size: 0,
             });
@@ -291,7 +275,6 @@ impl PipelineRegistry {
             camera_uniform_bind_group_layout,
             general_uniform_buffer,
             general_uniform_bind_group,
-            storage_bind_group_layout,
 
             render_pipeline_layout,
             blocks_render_pipeline,

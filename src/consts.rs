@@ -21,6 +21,6 @@ pub const PLAYER_HALF_WIDTH: f32 = 0.3;
 /// 身長(足元から目まで)
 pub const PLAYER_HEIGHT: f32 = 1.8;
 /// 視野角
-pub const FOV: f32 =70.0;
+pub const FOV: f32 = 110.0;
 /// 描画対象の最短距離
 pub const Z_NEAR: f32 = 0.1;

@@ -79,8 +79,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
     let view_dir = normalize(view_vector);
 
     // 線形フォグのブレンド率
-    let fog_start = 32.0;
-    let fog_end = 2048.0;
+    let fog_start = 2048.0;
+    let fog_end = 4096.0;
     let fog_factor = clamp((view_dist - fog_start) / (fog_end - fog_start), 0.0, 1.0);
 
     // 太陽方向の取得

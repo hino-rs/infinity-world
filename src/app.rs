@@ -230,7 +230,6 @@ impl ApplicationHandler for Application {
                     world.update(
                         dt,
                         &gpu.device,
-                        &pipelines.storage_bind_group_layout,
                         compute,
                         &gpu.queue,
                     );

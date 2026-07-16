@@ -20,7 +20,6 @@ pub struct Chunk {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_indices: u32,
-    pub bind_group: Option<wgpu::BindGroup>,
 }
 
 impl Chunk {
@@ -107,7 +106,6 @@ impl Terrain {
         device: &wgpu::Device,
         seed: i32,
         center: IVec3,
-        layout: &wgpu::BindGroupLayout,
         camera: &Camera,
         compute: &Compute,
         queue: &wgpu::Queue,
@@ -149,14 +147,11 @@ impl Terrain {
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-            let (_storage_buffer, bind_group) = create_chunk_storage(device, layout, &blocks);
-
             self.chunks.entry((cx, cy, cz)).or_insert(Chunk {
                 blocks: compressed,
                 vertex_buffer,
                 index_buffer,
                 num_indices: inds.len() as u32,
-                bind_group,
             });
         }
 
@@ -403,34 +398,4 @@ impl Terrain {
 
         positions
     }
-}
-
-fn create_chunk_storage(
-    device: &wgpu::Device,
-    layout: &wgpu::BindGroupLayout,
-    blocks: &Option<Box<ChunkBlocks>>,
-) -> (Option<wgpu::Buffer>, Option<wgpu::BindGroup>) {
-    let Some(blocks) = blocks else {
-        return (None, None);
-    };
-
-    let raw_blocks: Vec<u32> = blocks.iter().map(|&b| b as u32).collect();
-
-    use wgpu::util::DeviceExt;
-    let storage_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Chunk Storage Buffer"),
-        contents: bytemuck::cast_slice(&raw_blocks),
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-    });
-
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Chunk Storage Bind Group"),
-        layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: storage_buffer.as_entire_binding(),
-        }],
-    });
-
-    (Some(storage_buffer), Some(bind_group))
 }
