@@ -9,13 +9,10 @@ use crate::camera::Camera;
 use crate::chunk::Rle;
 use crate::compute::{ChunkUniforms, Compute};
 use crate::game::BlockType::Air;
-use crate::player::{AabbFull, Player};
+use crate::utils::AabbFull;
+use crate::types::*;
 use crate::{chunk, create_terrain};
-use crate::{consts::*, game::BlockType, player::Aabb};
-
-pub type ChunkBlocks = [BlockType; NUM_CHUNK_BLOCKS];
-
-
+use crate::{consts::*, game::BlockType};
 
 #[derive(Debug)]
 pub struct Chunk {
@@ -36,9 +33,6 @@ impl Chunk {
         y.as_() * (CHUNK_SIZE * CHUNK_SIZE) + x.as_() * CHUNK_SIZE + z.as_()
     }
 }
-
-pub type ChunkPos = (i32, i32, i32);
-pub type Chunks = HashMap<ChunkPos, Chunk>;
 
 pub struct ChunkResult {
     pub pos: ChunkPos,
@@ -74,7 +68,7 @@ impl Terrain {
         let mut remove_poses = Vec::new();
         for &chunk_pos in self.chunks.keys() {
             let (cx, cy, cz) = chunk_pos;
-            
+
             let dx = (cx - cx_player).abs();
             let dy = (cy - cy_player).abs();
             let dz = (cz - cz_player).abs();
@@ -183,7 +177,6 @@ impl Terrain {
                                 cx,
                                 cy,
                                 cz,
-                                camera_pos.as_ivec3(),
                             );
                             let compressed = chunk::compress(&blocks);
 
@@ -306,28 +299,6 @@ impl Terrain {
             compute.request_blocks_async(self.gpu_tx.clone());
             self.gpu_in_progress = Some(batch_coords);
         }
-
-        // for &(cx, cy, cz) in &coords {
-        //     self.chunk_in_progress.insert((cx, cy, cz));
-        //     let tx = self.chunk_tx.clone();
-
-        //     compute.update(device, queue, [cx, cy, cz], seed);
-        //     let blocks = compute.get(device);
-
-        //     rayon::spawn(move || {
-        //         let (verts, inds) =
-        //             create_terrain::build_chunk_mesh(&blocks, cx, cy, cz, camera_pos.as_ivec3());
-        //         let compressed = chunk::compress(&blocks);
-
-        //         let _ = tx.send(ChunkResult {
-        //             pos: (cx, cy, cz),
-        //             blocks,
-        //             compressed,
-        //             verts,
-        //             inds,
-        //         });
-        //     });
-        // }
     }
 
     // 最初は初期ポジのXZに位置するチャンクだけ作る

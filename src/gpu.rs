@@ -17,6 +17,7 @@ pub struct GpuContext {
 }
 
 impl GpuContext {
+    /// GPU初期化
     pub async fn new(window: Arc<Window>, vsync: bool, fullpower: bool) -> Self {
         let size = window.inner_size();
 
@@ -78,6 +79,7 @@ impl GpuContext {
         &mut self, 
         new_size: winit::dpi::PhysicalSize<u32>,
         render_info: &mut RenderInfo,
+        brush: &mut TextBrush<FontArc>
     ) {
         if new_size.width > 0 && new_size.height > 0 {
             self.config.width = new_size.width;
@@ -85,8 +87,8 @@ impl GpuContext {
             // サーフェス（描画ウィンドウ）のサイズ再設定
             self.surface.configure(&self.device, &self.config);
             // テキストブラシにプロジェクションサイズ変更を通知
-            // self.brush
-            //     .resize_view(new_size.width as f32, new_size.height as f32, &self.queue);
+            brush
+                .resize_view(new_size.width as f32, new_size.height as f32, &self.queue);
             // ウィンドウサイズに応じた大きさで深度テクスチャを再生成
             let (depth_texture, depth_view) =
                 RenderInfo::create_depth_texture(&self.device, &self.config);
@@ -247,7 +249,7 @@ impl GpuContext {
         }
 
         
-        // // テキスト情報を構築してキューに追加
+        // テキスト情報を構築してキューに追加
         let fps_text = format!("FPS: {:.0}", &fps.fps());
         let coord = camera.xyz();
         let coord_text = format!("{:.0}, {:.0}, {:.0}", coord.0, coord.1, coord.2);

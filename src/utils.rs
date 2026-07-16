@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use glam::IVec3;
+use glam::{IVec3,Vec3};
 
 /// 地点A,Bのマンハッタン距離を返す(i32)
 pub fn manhattan_distance(pos1: IVec3, pos2: IVec3) -> i32 {
@@ -10,6 +10,22 @@ pub fn manhattan_distance(pos1: IVec3, pos2: IVec3) -> i32 {
 /// 地点A,Bのユークリッド距離を返す(i32)
 pub fn euclidean_distance(pos1: IVec3, pos2: IVec3) -> i32 {
     pos1.distance_squared(pos2)
+}
+
+/// firstが左下手前、endが右上奥
+pub struct Aabb {
+    pub first: Vec3,
+    pub end: Vec3,
+}
+
+/// AABB全頂点
+pub struct AabbFull {
+    pub min_x: f32,
+    pub max_x: f32,
+    pub min_y: f32,
+    pub max_y: f32,
+    pub min_z: f32,
+    pub max_z: f32,
 }
 
 /// 湿潤度と温度から(相対湿度, 絶対湿度)を返す

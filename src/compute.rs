@@ -4,8 +4,8 @@ use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferAddress, BufferBindingType, BufferDescriptor, BufferUsages, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device, MapMode, PipelineLayoutDescriptor, Queue, ShaderModuleDescriptor, ShaderSource, ShaderStages, util::{BufferInitDescriptor, DeviceExt}, wgt::CommandEncoderDescriptor,
 };
 
-use crate::{consts::{BATCH_SIZE, NUM_CHUNK_BLOCKS}, game::BlockType, terrain::ChunkBlocks};
-
+use crate::{consts::{BATCH_SIZE, NUM_CHUNK_BLOCKS}, game::BlockType};
+use crate::types::*;
 
 
 #[repr(C)]

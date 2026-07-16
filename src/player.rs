@@ -2,23 +2,9 @@ use crate::{
     camera::Camera,
     consts::*,
     terrain::Terrain,
+    utils::{Aabb, AabbFull},
 };
 use glam::*;
-
-/// firstが左下手前、endが右上奥
-pub struct Aabb {
-    pub first: Vec3,
-    pub end: Vec3,
-}
-
-pub struct AabbFull {
-    pub min_x: f32,
-    pub max_x: f32,
-    pub min_y: f32,
-    pub max_y: f32,
-    pub min_z: f32,
-    pub max_z: f32,
-}
 
 pub struct Player {
     pub position: Vec3,

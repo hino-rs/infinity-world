@@ -1,7 +1,7 @@
 use crate::consts::*;
 use crate::game::BlockType;
 use crate::noise::domain_warp;
-use crate::terrain::{Chunk, ChunkBlocks};
+use crate::types::*;
 
 #[derive(Debug)]
 pub struct Rle {

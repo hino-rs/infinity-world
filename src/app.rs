@@ -9,18 +9,24 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
 use crate::camera::CameraGpu;
-use crate::consts::BATCH_SIZE;
 use crate::compute::{ChunkUniforms, Compute};
-use half::f16;
+use crate::consts::BATCH_SIZE;
 use crate::fps::FpsCounter;
 use crate::gpu::GpuContext;
 use crate::pipeline::PipelineRegistry;
 use crate::render_info::RenderInfo;
 use crate::world::World;
+use half::f16;
 
 static FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-VariableFont_wght.ttf");
 
 /// アプリケーション設定。起動時のコマンドにする。
+///
+/// - fullscreen: ウィンドウをボーダーレスフルスクリーンで展開します
+/// - debug: アプリケーションを1分後に強制終了し、総フレーム数を表示します
+/// - touchpad: ラップトップなどのタッチパッド用に、感度を高く設定します
+/// - vsync: VSyncをオンにします
+/// - fullpower: 電源モードをパフォーマンス優先にします
 #[derive(Default)]
 pub struct AppOption {
     pub fullscreen: bool,
@@ -54,7 +60,9 @@ pub struct Application {
 }
 
 impl Application {
-    pub fn new(option: AppOption) -> Self {
+    /// アプリケーションを初期化します。
+    /// オプションを渡さない場合はデフォルトの設定になります。
+    pub fn new(option: Option<AppOption>) -> Self {
         let (env_tx, env_rx) = mpsc::channel();
         Self {
             window: None,
@@ -69,7 +77,7 @@ impl Application {
             brush: None,
             now: Instant::now(),
             frames: 0,
-            option,
+            option: option.unwrap_or_default(),
             compute: None,
             gpu_env_in_progress: false,
             env_rx,
@@ -86,42 +94,54 @@ impl ApplicationHandler for Application {
             return;
         }
 
+        // ウィンドウ作成
         let window = Arc::new(
             event_loop
-                .create_window(
-                    if self.option.fullscreen {
-                        Window::default_attributes().with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
-                    } else {
-                        Window::default_attributes()
-                    })
+                .create_window(if self.option.fullscreen {
+                    // フルスクリーン
+                    Window::default_attributes()
+                        .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
+                } else {
+                    Window::default_attributes()
+                })
                 .unwrap(),
         );
-
         window
-            .set_cursor_grab(winit::window::CursorGrabMode::Confined)
+            .set_cursor_grab(winit::window::CursorGrabMode::Confined) // カーソルをウィンドウ内に閉じ込める
             .ok();
-        window.set_cursor_visible(false);
+        window.set_cursor_visible(false); // カーソルを非表示に
 
+        // フォント
         let font = FontArc::try_from_slice(FONT_BYTES).expect("フォント読み込み失敗");
-        let gpu = pollster::block_on(GpuContext::new(Arc::clone(&window), self.option.vsync, self.option.fullpower));
+        // GPU周り
+        let gpu = pollster::block_on(GpuContext::new(
+            Arc::clone(&window),
+            self.option.vsync,
+            self.option.fullpower,
+        ));
+        // パイプライン
         let pipelines = PipelineRegistry::new(&gpu.device, &gpu.config);
+        // ワールド
         let world = World::new(
             gpu.config.width as f32 / gpu.config.height as f32,
-            if self.option.touchpad { 0.03 } else { 0.003 },
+            if self.option.touchpad { 0.03 } else { 0.003 }, // 感度
         );
+        // カメラのユニフォーム、バッファ、バインドグループ
         let camera_gpu = CameraGpu::new(
             &gpu.device,
             &pipelines.camera_uniform_bind_group_layout,
             &world.camera,
         );
+        // 描画時の深度や色設定
         let render = RenderInfo::new(&gpu.device, &gpu.config);
+        // wgpu_text
         let brush = BrushBuilder::using_font(font).build(
             &gpu.device,
             gpu.config.width,
             gpu.config.height,
             gpu.config.format,
         );
-        
+        // コンピュート
         let compute = Compute::build(&gpu.device);
 
         self.window = Some(window);
@@ -147,10 +167,12 @@ impl ApplicationHandler for Application {
             WindowEvent::KeyboardInput {
                 event: key_event, ..
             } => {
+                // エスケープでアプリ終了
                 if key_event.physical_key == PhysicalKey::Code(KeyCode::Escape) {
                     event_loop.exit();
                 }
-                
+
+                // キーボード操作とプレイヤー移動のための処理
                 if let Some(world) = &mut self.world {
                     if let PhysicalKey::Code(keycode) = key_event.physical_key {
                         world.player_controller.process_keyboard(
@@ -160,14 +182,16 @@ impl ApplicationHandler for Application {
                         );
                     }
                 }
-                
             }
             WindowEvent::Resized(physical_size) => {
-                if let (Some(gpu), Some(render_info)) = (&mut self.gpu, &mut self.render) {
-                    gpu.resize(physical_size, render_info);
+                if let (Some(gpu), Some(render_info), Some(brush)) =
+                    (&mut self.gpu, &mut self.render, &mut self.brush)
+                {
+                    gpu.resize(physical_size, render_info, brush);
                 }
             }
             WindowEvent::RedrawRequested => {
+                // デバッグモードで1分終了
                 if self.option.debug {
                     self.frames += 1;
                     if self.now.elapsed().as_secs() > 60 {
@@ -200,8 +224,16 @@ impl ApplicationHandler for Application {
                     &self.compute,
                 ) {
                     let time = Instant::now().duration_since(self.time).as_secs_f32();
+                    // GPUへ時間を伝える
                     pipelines.update_general_uniform(&gpu.queue, time);
-                    world.update(dt, &gpu.device, &pipelines.storage_bind_group_layout, compute, &gpu.queue);
+                    // ワールド状態を進める
+                    world.update(
+                        dt,
+                        &gpu.device,
+                        &pipelines.storage_bind_group_layout,
+                        compute,
+                        &gpu.queue,
+                    );
                     camera_gpu.update(&gpu.queue, &world.camera);
                     let _delta = self.fps.tick();
                     let _ = gpu.device.poll(wgpu::PollType::Poll);

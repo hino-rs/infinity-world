@@ -14,6 +14,7 @@ mod fps;
 mod utils;
 mod chunk;
 mod compute;
+mod types;
 
 use winit::event_loop::{ControlFlow, EventLoop};
 
@@ -37,7 +38,7 @@ fn main() {
         }
     });
 
-    let mut app = Application::new(option);
+    let mut app = Application::new(Some(option));
 
     event_loop.run_app(&mut app).unwrap();
 }

@@ -1,12 +1,10 @@
-use glam::IVec3;
-
 use crate::consts::*;
-use crate::noise::*;
 use crate::{game::BlockType, terrain::*};
+use crate::types::*;
 
 /// 地形の頂点データ
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct TerrainVertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
@@ -16,16 +14,6 @@ pub struct TerrainVertex {
 }
 
 impl TerrainVertex {
-    pub fn none() -> Self {
-        Self {
-            position: [0.0, 0.0, 0.0],
-            tex_coords: [0.0, 0.0],
-            block_type: 0,
-            ao_factor: 0.0,
-            normal: [0.0, 0.0, 0.0],
-        }
-    }
-
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
         wgpu::VertexBufferLayout {
@@ -62,6 +50,7 @@ impl TerrainVertex {
     }
 }
 
+/// 両隣と角をもとにAO値を返す。
 pub fn calc_ao(side1: bool, side2: bool, corner: bool) -> u8 {
     if side1 && side2 {
         return 0;
@@ -82,18 +71,15 @@ pub fn is_solid(x: i32, y: i32, z: i32, blocks: &ChunkBlocks) -> bool {
     blocks[index] != BlockType::Air
 }
 
-type Mask = [[Option<(BlockType, [f32; 4])>; CHUNK_SIZE]; CHUNK_SIZE];
-
 /// ブロック配列からAO付きグリーディメッシュを作る。
 pub fn build_chunk_mesh(
     blocks: &Option<Box<ChunkBlocks>>,
     chunk_x: i32,
     chunk_y: i32,
     chunk_z: i32,
-    camera_pos: IVec3,
 ) -> (Vec<TerrainVertex>, Vec<u32>) {
     let Some(blocks) = blocks else {
-        return (vec![TerrainVertex::none()], vec![0]);
+        return (vec![TerrainVertex::default()], vec![0]);
     };
 
     let mut vertices = Vec::new();
@@ -104,18 +90,23 @@ pub fn build_chunk_mesh(
     let offset_y = (chunk_y * CHUNK_SIZE_I32) as f32;
     let offset_z = (chunk_z * CHUNK_SIZE_I32) as f32;
 
-    // --- 上面 (+Y) のグリーディメッシュ ---
+    // --- 上面 (+Y) のメッシュ作成 ---
     for y in 0..CHUNK_SIZE {
+        // 現在のYレイヤにおいて描画すべき面がどこにあるかを記録するマスク
         let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
+        // 描画すべき面を探す
         for x in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
                 let xi = x as i32;
                 let yi = y as i32;
                 let zi = z as i32;
 
+                // 自身が不透明、かつ真上が透明なら描画対象 AO計算に移る
                 if is_solid(xi, yi, zi, blocks) && !is_solid(xi, yi + 1, zi, blocks) {
                     let index = Chunk::index(x, y, z);
+                    
+                    // ←↓↙で左手前の角
                     let f0 = 0.25
                         + 0.75
                             * (calc_ao(
@@ -124,6 +115,8 @@ pub fn build_chunk_mesh(
                                 is_solid(xi - 1, yi + 1, zi - 1, blocks),
                             ) as f32
                                 / 3.0);
+                    
+                    // 右手前
                     let f1 = 0.25
                         + 0.75
                             * (calc_ao(
@@ -132,6 +125,8 @@ pub fn build_chunk_mesh(
                                 is_solid(xi + 1, yi + 1, zi - 1, blocks),
                             ) as f32
                                 / 3.0);
+
+                    // 右奥
                     let f2 = 0.25
                         + 0.75
                             * (calc_ao(
@@ -140,6 +135,8 @@ pub fn build_chunk_mesh(
                                 is_solid(xi + 1, yi + 1, zi + 1, blocks),
                             ) as f32
                                 / 3.0);
+
+                    // 左奥
                     let f3 = 0.25
                         + 0.75
                             * (calc_ao(
@@ -153,10 +150,13 @@ pub fn build_chunk_mesh(
             }
         }
 
+        // メッシュ作成開始
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
+                // マスクに登録されているもののみ
                 if let Some((block_type, ao_factors)) = mask[x][z] {
                     let mut width = 1;
+                    // 別種のブロックか、異なるAO値のブロックが見えるまで横のマージ範囲を伸ばす
                     while x + width < CHUNK_SIZE
                         && mask[x + width][z] == Some((block_type, ao_factors))
                     {
@@ -164,7 +164,9 @@ pub fn build_chunk_mesh(
                     }
 
                     let mut height = 1;
+                    // 上へ伸ばしていく
                     'o: while z + height < CHUNK_SIZE {
+                        // 横幅は維持させる
                         for dx in 0..width {
                             if mask[x + dx][z + height] != Some((block_type, ao_factors)) {
                                 break 'o;
@@ -174,19 +176,24 @@ pub fn build_chunk_mesh(
                     }
 
                     let block_type_id = block_type as u32;
+
+                    // ワールド座標系における面の位置
                     let bx = x as f32 + offset_x;
                     let by = y as f32 + offset_y;
                     let bz = z as f32 + offset_z;
 
+                    // 新しく追加する4頂点の開始位置
                     let start_idx = vertices.len() as u32;
 
+                    // 左手前
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + 0.5, bz - 0.5],
-                        tex_coords: [0.0, height as f32],
+                        tex_coords: [0.0, height as f32], // UVはマージサイズ分
                         block_type: block_type_id,
-                        ao_factor: ao_factors[0],
-                        normal: [0.0, 1.0, 0.0],
+                        ao_factor: ao_factors[0], // 左手前の影
+                        normal: [0.0, 1.0, 0.0], // 真上法線
                     });
+                    // 右手前
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by + 0.5, bz - 0.5],
                         tex_coords: [width as f32, height as f32],
@@ -194,6 +201,7 @@ pub fn build_chunk_mesh(
                         ao_factor: ao_factors[1],
                         normal: [0.0, 1.0, 0.0],
                     });
+                    // 右奥
                     vertices.push(TerrainVertex {
                         position: [bx + width as f32 - 0.5, by + 0.5, bz + height as f32 - 0.5],
                         tex_coords: [width as f32, 0.0],
@@ -201,6 +209,7 @@ pub fn build_chunk_mesh(
                         ao_factor: ao_factors[2],
                         normal: [0.0, 1.0, 0.0],
                     });
+                    // 左奥
                     vertices.push(TerrainVertex {
                         position: [bx - 0.5, by + 0.5, bz + height as f32 - 0.5],
                         tex_coords: [0.0, 0.0],
@@ -209,6 +218,7 @@ pub fn build_chunk_mesh(
                         normal: [0.0, 1.0, 0.0],
                     });
 
+                    // インデックスデータの作成と追加
                     indices.extend_from_slice(&[
                         start_idx,
                         start_idx + 3,
@@ -218,6 +228,7 @@ pub fn build_chunk_mesh(
                         start_idx + 1,
                     ]);
 
+                    // 結合した使用済みマスクのクリア
                     for dy in 0..height {
                         for dx in 0..width {
                             mask[x + dx][z + dy] = None;
@@ -228,7 +239,7 @@ pub fn build_chunk_mesh(
         }
     }
 
-    // --- 下面 (-Y) のグリーディメッシュ ---
+    // --- 下面 (-Y) のメッシュ作成 ---
     for y in 0..CHUNK_SIZE {
         let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
@@ -352,7 +363,7 @@ pub fn build_chunk_mesh(
         }
     }
 
-    // --- 後ろ面 (-Z) のグリーディメッシュ ---
+    // --- 後ろ面 (-Z) のメッシュ作成 ---
     for z in 0..CHUNK_SIZE {
         let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
@@ -476,7 +487,7 @@ pub fn build_chunk_mesh(
         }
     }
 
-    // --- 前面 (+Z) のグリーディメッシュ ---
+    // --- 前面 (+Z) のメッシュ作成 ---
     for z in 0..CHUNK_SIZE {
         let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
@@ -600,7 +611,7 @@ pub fn build_chunk_mesh(
         }
     }
 
-    // --- 左面 (-X) のグリーディメッシュ ---
+    // --- 左面 (-X) のメッシュ作成 ---
     for x in 0..CHUNK_SIZE {
         let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
@@ -724,7 +735,7 @@ pub fn build_chunk_mesh(
         }
     }
 
-    // --- 右面 (+X) のグリーディメッシュ ---
+    // --- 右面 (+X) のメッシュ作成 ---
     for x in 0..CHUNK_SIZE {
         let mut mask: Mask = [[None; CHUNK_SIZE]; CHUNK_SIZE];
 
