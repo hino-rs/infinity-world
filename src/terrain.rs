@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::mpsc;
+use std::time::Instant;
 
 use glam::{IVec3, Mat4, Vec3};
 use num_traits::{AsPrimitive, Num};
@@ -106,7 +107,6 @@ impl Terrain {
         device: &wgpu::Device,
         seed: i32,
         center: IVec3,
-        camera: &Camera,
         compute: &Compute,
         queue: &wgpu::Queue,
         vp: &Mat4,
@@ -160,7 +160,6 @@ impl Terrain {
             match self.gpu_rx.try_recv() {
                 Ok(Ok(())) => {
                     let chunk_blocks = compute.read_blocks();
-                    let camera_pos = camera.eye;
 
                     for (blocks, &(cx, cy, cz)) in chunk_blocks.iter().zip(&batch_coords) {
                         let tx = self.chunk_tx.clone();
@@ -203,10 +202,13 @@ impl Terrain {
         }
 
         // --- 新規生成が必要なチャンク座標の探索 ---
+        
+        // 作成中のチャンクに上限
         if self.chunk_in_progress.len() >= CHANK_GEN_MAX_PENDING {
             return;
         }
 
+        // 上限の残り枠と1回あたりのバッチ上限の小さい方を追加する数とする
         let max_to_spawn = (CHANK_GEN_MAX_PENDING - self.chunk_in_progress.len()).min(BATCH_SIZE);
         if max_to_spawn == 0 {
             return;
@@ -215,7 +217,6 @@ impl Terrain {
         let cx = center.x.div_euclid(CHUNK_SIZE_I32);
         let cy = center.y.div_euclid(CHUNK_SIZE_I32);
         let cz = center.z.div_euclid(CHUNK_SIZE_I32);
-
         let start_pos = (cx, cy, cz);
         let mut gen_queue = VecDeque::new();
         gen_queue.push_back(start_pos);
@@ -234,7 +235,7 @@ impl Terrain {
             {
                 continue;
             }
-
+            
             let min_pos = Vec3::new(
                 (px * CHUNK_SIZE_I32) as f32,
                 (py * CHUNK_SIZE_I32) as f32,
@@ -250,6 +251,7 @@ impl Terrain {
                     }
                 }
             }
+
             for (dx, dy, dz) in &[
                 (1, 0, 0),
                 (-1, 0, 0),
@@ -282,6 +284,7 @@ impl Terrain {
                         chunk_pos: [cx, cy, cz],
                         seed,
                     });
+                    
                 } else {
                     chunk_uniforms.push(ChunkUniforms {
                         chunk_pos: [0, 0, 0],
@@ -289,10 +292,10 @@ impl Terrain {
                     });
                 }
             }
-
+            
             compute.update_blocks(device, queue, &chunk_uniforms);
             compute.request_blocks_async(self.gpu_tx.clone());
-            self.gpu_in_progress = Some(batch_coords);
+            self.gpu_in_progress = Some(batch_coords);   
         }
     }
 

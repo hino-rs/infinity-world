@@ -34,6 +34,7 @@ pub struct Compute {
     blocks_storage_buffer: Buffer,
     env_storage_buffer: Buffer,
     chunkmaker_data_size: BufferAddress,
+    env_data_size: BufferAddress,
     chunkmaker_uniform_buffer: Buffer,
 }
     
@@ -49,6 +50,7 @@ impl Compute {
             blocks_storage_buffer,
             env_storage_buffer,
             chunkmaker_data_size,
+            env_data_size,
             chunkmaker_uniform_buffer,
         ) = Self::build_chunk_maker(device);
 
@@ -62,15 +64,18 @@ impl Compute {
             blocks_storage_buffer,
             env_storage_buffer,
             chunkmaker_data_size,
+            env_data_size,
             chunkmaker_uniform_buffer,
         }
     }
 
     pub fn build_chunk_maker(
         device: &Device,
-    ) -> (Buffer, Buffer, BindGroup, ComputePipeline, ComputePipeline, ComputePipeline, Buffer, Buffer, BufferAddress, Buffer) {
+    ) -> (Buffer, Buffer, BindGroup, ComputePipeline, ComputePipeline, ComputePipeline, Buffer, Buffer, BufferAddress, BufferAddress, Buffer) {
         let init_chunk = vec![0; NUM_CHUNK_BLOCKS * BATCH_SIZE];
+        let init_env = vec![0u32; BATCH_SIZE];
         let size = (init_chunk.len() * std::mem::size_of::<u32>()) as BufferAddress;
+        let env_size = (init_env.len() * std::mem::size_of::<u32>()) as BufferAddress;
 
         let blocks_storage_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Blocks Storage Buffer"),
@@ -80,7 +85,7 @@ impl Compute {
 
         let env_storage_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Environment Storage Buffer"),
-            contents: bytemuck::cast_slice(&init_chunk),
+            contents: bytemuck::cast_slice(&init_env),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         });
 
@@ -93,7 +98,7 @@ impl Compute {
 
         let env_staging_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("Environment Staging Buffer"),
-            size,
+            size: env_size,
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -218,6 +223,7 @@ impl Compute {
             blocks_storage_buffer,
             env_storage_buffer,
             size,
+            env_size,
             uniform_buffer,
         )
     }
@@ -243,7 +249,7 @@ impl Compute {
             cp.set_pipeline(&self.env_pipeline);
             cp.set_bind_group(0, &self.chunkmaker_bind_group, &[]);
 
-            cp.dispatch_workgroups(4, 4, BATCH_SIZE as u32);
+            cp.dispatch_workgroups(1, 1, BATCH_SIZE as u32);
         }
 
         encoder.copy_buffer_to_buffer(
@@ -251,7 +257,7 @@ impl Compute {
             0,
             &self.env_staging_buffer,
             0,
-            self.chunkmaker_data_size,
+            self.env_data_size,
         );
 
         queue.submit(std::iter::once(encoder.finish()));
@@ -299,25 +305,17 @@ impl Compute {
         });
     }
 
-    pub fn read_env(&self) -> Vec<Box<[u32; NUM_CHUNK_BLOCKS]>> {
+    pub fn read_env(&self) -> Vec<u32> {
         let slice = self.env_staging_buffer.slice(..);
         let env_data = slice.get_mapped_range();
         let env_result: &[u32] = unsafe {
             std::slice::from_raw_parts(
                 env_data.as_ptr() as *const u32,
-                NUM_CHUNK_BLOCKS * BATCH_SIZE,
+                BATCH_SIZE,
             )
         };
 
-        let mut data = Vec::with_capacity(BATCH_SIZE);
-        for i in 0..BATCH_SIZE {
-            let start = i * NUM_CHUNK_BLOCKS;
-            let end = start + NUM_CHUNK_BLOCKS;
-            let env_slice = &env_result[start..end];
-            
-            let blocks_env: Box<[u32; NUM_CHUNK_BLOCKS]> = Box::new(env_slice.try_into().unwrap());
-            data.push(blocks_env);
-        }
+        let data = env_result.to_vec();
 
         drop(env_data);
         self.env_staging_buffer.unmap();

@@ -226,6 +226,7 @@ impl ApplicationHandler for Application {
                     let time = Instant::now().duration_since(self.time).as_secs_f32();
                     // GPUへ時間を伝える
                     pipelines.update_general_uniform(&gpu.queue, time);
+
                     // ワールド状態を進める
                     world.update(
                         dt,
@@ -236,18 +237,14 @@ impl ApplicationHandler for Application {
                     camera_gpu.update(&gpu.queue, &world.camera);
                     let _delta = self.fps.tick();
                     let _ = gpu.device.poll(wgpu::PollType::Poll);
+                    
 
                     if self.gpu_env_in_progress {
                         match self.env_rx.try_recv() {
                             Ok(Ok(())) => {
                                 let envs = compute.read_env();
-                                let player_block_pos = world.player.position.as_ivec3();
-                                let lx = player_block_pos.x.rem_euclid(32) as usize;
-                                let ly = player_block_pos.y.rem_euclid(32) as usize;
-                                let lz = player_block_pos.z.rem_euclid(32) as usize;
-                                let index = ly * 1024 + lx * 32 + lz;
-                                if index < envs[0].len() {
-                                    let packed = envs[0][index];
+                                if !envs.is_empty() {
+                                    let packed = envs[0];
                                     let temp_bits = (packed & 0xffff) as u16;
                                     let mois_bits = ((packed >> 16) & 0xffff) as u16;
                                     self.current_temp = f16::from_bits(temp_bits).to_f32();
@@ -267,7 +264,7 @@ impl ApplicationHandler for Application {
                             }
                         }
                     }
-
+                    
                     if !self.gpu_env_in_progress {
                         let cp = world.player.current_chunk_pos();
                         let mut chunk_uniforms = vec![ChunkUniforms::new(world.seed); BATCH_SIZE];
@@ -291,6 +288,8 @@ impl ApplicationHandler for Application {
                         self.current_temp,
                         self.current_mois,
                     );
+
+
                     window.request_redraw();
                 }
             }

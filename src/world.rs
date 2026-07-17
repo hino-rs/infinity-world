@@ -80,16 +80,17 @@ impl World {
         // 視錐台生成とカリングのために現在地とカメラビュープロジェクション
         let player_pos = self.player.position.as_ivec3();
         let vp = self.camera.build_view_projection_matrix(1.0);
+        
         // チャンク生成
         self.terrain.add_chunks(
             device,
             self.seed,
             player_pos,
-            &self.camera,
             compute,
             queue,
             &vp,
         );
+
         // 3tickに一度掃除を走らせる
         if self.ticks % 3 == 0 {
             // チャンク掃除

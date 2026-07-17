@@ -240,15 +240,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
 
     let chunk_offset = chunk_idx * (CHUNK_SIZE_U * CHUNK_SIZE_U * CHUNK_SIZE_U);
 
+    let env = unpack2x16float(env_data[chunk_idx]);
+    let biome_idx = get_biome_id(env.x, env.y);
+
     for (var y = 0u; y < CHUNK_SIZE_U; y++) {
         let wy = uniforms[chunk_idx].chunk_pos.y * CHUNK_SIZE_I + i32(y);
         let index = chunk_offset + y * (CHUNK_SIZE_U * CHUNK_SIZE_U) + x * CHUNK_SIZE_U + z;
 
-        // x: 気温(-90℃~150℃), y: 湿潤度(0.0~1.0)
-        let env = unpack2x16float(env_data[index]);
-
         if (wy <= h) {
-            let biome_idx = get_biome_id(env.x, env.y);
             let depth = h - wy;
             blocks[index] = get_biome_block(biome_idx, depth, wx, wz, seed);
         } else if wy < SEA_LEVEL {

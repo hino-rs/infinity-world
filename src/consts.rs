@@ -24,3 +24,5 @@ pub const PLAYER_HEIGHT: f32 = 1.8;
 pub const FOV: f32 = 110.0;
 /// 描画対象の最短距離
 pub const Z_NEAR: f32 = 0.1;
+/// 追加するチャンクの探索最大値
+pub const SEARCH_MAX_PENDING: usize = 256;
