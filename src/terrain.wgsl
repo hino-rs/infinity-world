@@ -234,9 +234,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let wx = f32(cx * 32 + i32(x));
     let wz = f32(cz * 32 + i32(z));
 
-    // let sc = scaling(wx, 0.0, wz);
+    // let sc = scaling(wx, wz);
     // let r = dw_fbm_value(sc, 1.0, seed);
-    let h = get_height(wx, 0.0, wz, seed);
+    let h = get_height(wx, wz, seed);
 
     let chunk_offset = chunk_idx * (CHUNK_SIZE_U * CHUNK_SIZE_U * CHUNK_SIZE_U);
 
@@ -274,10 +274,22 @@ fn hash(n: f32, seed: i32) -> f32 {
 }
 
 fn hash2d(p: vec2f, seed: i32) -> f32 {
-    let p_seeded = p + vec2f(f32(seed) * 12.9898, f32(seed) * 78.233);
-    var p3 = fract(vec3f(p_seeded.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
+    let ip = vec2u(
+        u32(i32(floor(p.x))),
+        u32(i32(floor(p.y)))
+    );
+    let s = u32(seed);
+
+    var v = ip ^ vec2u(s);
+    v = v * 1664525u + 1013904223u;
+    v.x += v.y * 1103515245u;
+    v.y += v.x * 1103515245u;
+    v ^= v >> vec2u(16u);
+    v.x += v.y * 1103515245u;
+    v.y += v.x * 1103515245u;
+    v ^= v >> vec2u(16u);
+
+    return f32(v.x) * (1.0 / 4294967295.0);
 }
 
 fn hash3d(p: vec3f, seed: i32) -> f32 {
@@ -303,9 +315,268 @@ fn hash3d(p: vec3f, seed: i32) -> f32 {
 }
 
 // =======================================================
-// ノイズ
+// 2D ノイズ関数群
 // =======================================================
-fn value_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+
+fn get_grad(p: vec2f, seed: i32) -> vec2f {
+    let h = u32(hash2d(p, seed) * 8.0) & 7u;
+    switch (h) {
+        case 0u:  { return vec2f(1.0, 0.0); }
+        case 1u:  { return vec2f(-1.0, 0.0); }
+        case 2u:  { return vec2f(0.0, 1.0); }
+        case 3u:  { return vec2f(0.0, -1.0); }
+        case 4u:  { return vec2f(0.70710678, 0.70710678); }
+        case 5u:  { return vec2f(-0.70710678, 0.70710678); }
+        case 6u:  { return vec2f(0.70710678, -0.70710678); }
+        default:  { return vec2f(-0.70710678, -0.70710678); }
+    }
+}
+
+fn perlin_noise(x: f32, z: f32, seed: i32) -> f32 {
+    let p = vec2f(x, z);
+    let ip = floor(p);
+    let fp = p - ip;
+
+    let u = fade(fp.x);
+    let v = fade(fp.y);
+
+    let g00 = ip + vec2f(0.0, 0.0);
+    let g10 = ip + vec2f(1.0, 0.0);
+    let g01 = ip + vec2f(0.0, 1.0);
+    let g11 = ip + vec2f(1.0, 1.0);
+
+    let n00 = dot(get_grad(g00, seed), fp - vec2f(0.0, 0.0));
+    let n10 = dot(get_grad(g10, seed), fp - vec2f(1.0, 0.0));
+    let n01 = dot(get_grad(g01, seed), fp - vec2f(0.0, 1.0));
+    let n11 = dot(get_grad(g11, seed), fp - vec2f(1.0, 1.0));
+
+    let x0 = mix(n00, n10, u);
+    let x1 = mix(n01, n11, u);
+
+    let val = mix(x0, x1, v);
+    return val * 0.5 + 0.5;
+}
+
+fn simplex_noise(x: f32, z: f32, seed: i32) -> f32 {
+    let F2 = 0.366025403;
+    let G2 = 0.211324865;
+
+    let p = vec2f(x, z);
+    let s = (p.x + p.y) * F2;
+    let ips = floor(p + s);
+    let t = (ips.x + ips.y) * G2;
+    let p0 = ips - t;
+    let d0 = p - p0;
+
+    var i1: vec2f;
+    if (d0.x > d0.y) {
+        i1 = vec2f(1.0, 0.0);
+    } else {
+        i1 = vec2f(0.0, 1.0);
+    }
+
+    let d1 = d0 - i1 + G2;
+    let d2 = d0 - vec2f(1.0, 1.0) + 2.0 * G2;
+
+    let g0 = get_grad(ips, seed);
+    let g1 = get_grad(ips + i1, seed);
+    let g2 = get_grad(ips + vec2f(1.0, 1.0), seed);
+
+    var n0 = 0.0;
+    var n1 = 0.0;
+    var n2 = 0.0;
+
+    let t0 = 0.5 - dot(d0, d0);
+    if (t0 > 0.0) {
+        let t0_2 = t0 * t0;
+        n0 = t0_2 * t0_2 * dot(g0, d0);
+    }
+
+    let t1 = 0.5 - dot(d1, d1);
+    if (t1 > 0.0) {
+        let t1_2 = t1 * t1;
+        n1 = t1_2 * t1_2 * dot(g1, d1);
+    }
+
+    let t2 = 0.5 - dot(d2, d2);
+    if (t2 > 0.0) {
+        let t2_2 = t2 * t2;
+        n2 = t2_2 * t2_2 * dot(g2, d2);
+    }
+
+    let val = 70.0 * (n0 + n1 + n2);
+    return val * 0.5 + 0.5;
+}
+
+fn value_noise(x: f32, z: f32, seed: i32) -> f32 {
+    let x_grid = floor(x);
+    let z_grid = floor(z);
+
+    let x_frac = x - x_grid;
+    let z_frac = z - z_grid;
+
+    let u = fade(x_frac);
+    let w = fade(z_frac);
+
+    let v00 = hash2d(vec2f(x_grid,       z_grid),       seed);
+    let v10 = hash2d(vec2f(x_grid + 1.0, z_grid),       seed);
+    let v01 = hash2d(vec2f(x_grid,       z_grid + 1.0), seed);
+    let v11 = hash2d(vec2f(x_grid + 1.0, z_grid + 1.0), seed);
+
+    let x0 = mix(v00, v10, u);
+    let x1 = mix(v01, v11, u);
+
+    return mix(x0, x1, w);
+}
+
+fn fbm(x: f32, z: f32, seed: i32, octaves: u32) -> f32 {
+    var sum = 0.0;
+    var amplitude = 0.5;
+    var frequency = 1.0;
+    var max_val = 0.0;
+
+    let lacunarity = 2.0;
+    let persistence = 0.5;
+
+    for (var i = 0u; i < octaves; i++) {
+        let n = simplex_noise(x * frequency, z * frequency, seed + i32(i) * 131i);
+
+        sum += n * amplitude;
+        max_val += amplitude;
+        amplitude *= persistence;
+        frequency *= lacunarity;
+    }
+
+    return sum / max_val;
+}
+
+fn billow(x: f32, z: f32, seed: i32, octaves: u32) -> f32 {
+    var sum = 0.0;
+    var amplitude = 0.5;
+    var frequency = 1.0;
+    var max_val = 0.0;
+
+    let lacunarity = 2.0;
+    let persistence = 0.5;
+
+    for (var i = 0u; i < octaves; i++) {
+        let n = value_noise(x * frequency, z * frequency, seed + i32(i) * 131i);
+        let v = abs(n * 2.0 - 1.0);
+        sum += v * amplitude;
+        max_val += amplitude;
+        amplitude *= persistence;
+        frequency *= lacunarity;
+    }
+
+    return sum / max_val;
+}
+
+fn ridged(x: f32, z: f32, seed: i32, octaves: u32) -> f32 {
+    var sum = 0.0;
+    var amplitude = 0.5;
+    var frequency = 1.0;
+    var weight = 1.0;
+
+    let lacunarity = 2.0;
+    let persistence = 0.5;
+
+    for (var i = 0u; i < octaves; i++) {
+        let n = value_noise(x * frequency, z * frequency, seed + i32(i) * 131i);
+        var v = 1.0 - abs(n * 2.0 - 1.0);
+        v = v * v;
+        v = v * weight;
+        weight = clamp(v * 2.0, 0.0, 1.0);
+
+        sum += v * amplitude;
+        frequency *= lacunarity;
+        amplitude *= persistence;
+    }
+
+    var max_val = 0.0;
+    var amp = 0.5;
+    for (var i = 0u; i < octaves; i++) {
+        max_val += amp;
+        amp *= persistence;
+    }
+
+    return sum / max_val;
+}
+
+fn get_cell_point(cell: vec2f, seed: i32) -> vec2f {
+    let x_hash = hash2d(cell, seed);
+    let y_hash = hash2d(cell, seed + 1357);
+    return vec2f(x_hash, y_hash);
+}
+
+fn worley_noise(x: f32, z: f32, seed: i32) -> f32 {
+    let p = vec2f(x, z);
+    let ip = floor(p);
+    let fp = p - ip;
+
+    var min_dist = 8.0;
+
+    for (var i = -1; i <= 1; i++) {
+        for (var j = -1; j <= 1; j++) {
+            let cell_offset = vec2f(f32(i), f32(j));
+            let cell_coord = ip + cell_offset;
+            let point_in_cell = get_cell_point(cell_coord, seed);
+            let r = cell_offset + point_in_cell - fp;
+            let d = dot(r, r);
+            if (d < min_dist) {
+                min_dist = d;
+            }
+        }
+    }
+
+    let val = sqrt(min_dist);
+    return clamp(val, 0.0, 1.0);
+}
+
+fn scaling(x: f32, z: f32) -> vec2f {
+    let sx = x / SCALE;
+    let sz = z / SCALE;
+    return vec2f(sx, sz);
+}
+
+fn dw_fbm_value(sc: vec2f, amplitude: f32, seed: i32) -> f32 {
+    let dx = value_noise(sc.x, sc.y, seed) * amplitude;
+    let dy = value_noise(sc.x, sc.y, seed + 1) * amplitude;
+
+    let p = vec2f(sc.x + dx, sc.y + dy);
+
+    return fbm(p.x, p.y, seed + 3, 4);
+}
+
+fn pink_noise(x: f32, z: f32, seed: i32) -> f32 {
+    var sum = 0.0;
+    var amplitude = 0.5;
+    var frequency = 1.0;
+    var max_val = 0.0;
+    let lacunarity = 2.0;
+    let persistence = 0.5;
+
+    for (var i = 0u; i < 6u; i = i + 1u) {
+        let n = simplex_noise(x * frequency, z * frequency, seed + i32(i) * 131i);
+        sum += n * amplitude;
+        max_val += amplitude;
+        amplitude *= persistence;
+        frequency *= lacunarity;
+    }
+    return sum / max_val;
+}
+
+fn blue_noise(x: f32, z: f32, seed: i32) -> f32 {
+    let p = vec2f(x, z);
+    let white = hash2d(p, seed);
+    let low = value_noise(x, z, seed);
+    return clamp(white - low + 0.5, 0.0, 1.0);
+}
+
+// =======================================================
+// 3D ノイズ関数群 (互換用)
+// =======================================================
+
+fn value_noise_3d(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     // 格子点の特定
     let x_grid = floor(x);
     let y_grid = floor(y);
@@ -346,7 +617,7 @@ fn value_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     return mix(y0, y1, w);
 }
 
-fn get_grad(p: vec3f, seed: i32) -> vec3f {
+fn get_grad_3d(p: vec3f, seed: i32) -> vec3f {
     let h = u32(hash3d(p, seed) * 16.0) & 15u;
     switch (h) {
         case 0u:  { return vec3f(1.0, 1.0, 0.0); }
@@ -368,14 +639,14 @@ fn get_grad(p: vec3f, seed: i32) -> vec3f {
     }
 }
 
-fn get_cell_point(cell: vec3f, seed: i32) -> vec3f {
+fn get_cell_point_3d(cell: vec3f, seed: i32) -> vec3f {
     let x_hash = hash3d(cell, seed);
     let y_hash = hash3d(cell, seed + 1357);
     let z_hash = hash3d(cell, seed + 2468);
     return vec3f(x_hash, y_hash, z_hash);
 }
 
-fn perlin_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+fn perlin_noise_3d(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     let p = vec3f(x, y, z);
     let ip = floor(p);
     let fp = p - ip;
@@ -393,14 +664,14 @@ fn perlin_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     let g011 = ip + vec3f(0.0, 1.0, 1.0);
     let g111 = ip + vec3f(1.0, 1.0, 1.0);
 
-    let n000 = dot(get_grad(g000, seed), fp - vec3f(0.0, 0.0, 0.0));
-    let n100 = dot(get_grad(g100, seed), fp - vec3f(1.0, 0.0, 0.0));
-    let n010 = dot(get_grad(g010, seed), fp - vec3f(0.0, 1.0, 0.0));
-    let n110 = dot(get_grad(g110, seed), fp - vec3f(1.0, 1.0, 0.0));
-    let n001 = dot(get_grad(g001, seed), fp - vec3f(0.0, 0.0, 1.0));
-    let n101 = dot(get_grad(g101, seed), fp - vec3f(1.0, 0.0, 1.0));
-    let n011 = dot(get_grad(g011, seed), fp - vec3f(0.0, 1.0, 1.0));
-    let n111 = dot(get_grad(g111, seed), fp - vec3f(1.0, 1.0, 1.0));
+    let n000 = dot(get_grad_3d(g000, seed), fp - vec3f(0.0, 0.0, 0.0));
+    let n100 = dot(get_grad_3d(g100, seed), fp - vec3f(1.0, 0.0, 0.0));
+    let n010 = dot(get_grad_3d(g010, seed), fp - vec3f(0.0, 1.0, 0.0));
+    let n110 = dot(get_grad_3d(g110, seed), fp - vec3f(1.0, 1.0, 0.0));
+    let n001 = dot(get_grad_3d(g001, seed), fp - vec3f(0.0, 0.0, 1.0));
+    let n101 = dot(get_grad_3d(g101, seed), fp - vec3f(1.0, 0.0, 1.0));
+    let n011 = dot(get_grad_3d(g011, seed), fp - vec3f(0.0, 1.0, 1.0));
+    let n111 = dot(get_grad_3d(g111, seed), fp - vec3f(1.0, 1.0, 1.0));
 
     let x00 = mix(n000, n100, u);
     let x10 = mix(n010, n110, u);
@@ -414,7 +685,7 @@ fn perlin_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     return val * 0.5 + 0.5;
 }
 
-fn simplex_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+fn simplex_noise_3d(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     let F3 = 0.333333333;
     let G3 = 0.166666667;
 
@@ -456,10 +727,10 @@ fn simplex_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     let d2 = d0 - i2 + 2.0 * G3;
     let d3 = d0 - vec3f(1.0, 1.0, 1.0) + 3.0 * G3;
 
-    let g0 = get_grad(ips, seed);
-    let g1 = get_grad(ips + i1, seed);
-    let g2 = get_grad(ips + i2, seed);
-    let g3 = get_grad(ips + vec3f(1.0, 1.0, 1.0), seed);
+    let g0 = get_grad_3d(ips, seed);
+    let g1 = get_grad_3d(ips + i1, seed);
+    let g2 = get_grad_3d(ips + i2, seed);
+    let g3 = get_grad_3d(ips + vec3f(1.0, 1.0, 1.0), seed);
 
     var n0 = 0.0;
     var n1 = 0.0;
@@ -494,7 +765,7 @@ fn simplex_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     return val * 0.5 + 0.5;
 }
 
-fn worley_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+fn worley_noise_3d(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     let p = vec3f(x, y, z);
     let ip = floor(p);
     let fp = p - ip;
@@ -506,7 +777,7 @@ fn worley_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
             for (var k = -1; k <= 1; k++) {
                 let cell_offset = vec3f(f32(i), f32(j), f32(k));
                 let cell_coord = ip + cell_offset;
-                let point_in_cell = get_cell_point(cell_coord, seed);
+                let point_in_cell = get_cell_point_3d(cell_coord, seed);
                 let r = cell_offset + point_in_cell - fp;
                 let d = dot(r, r);
                 if (d < min_dist) {
@@ -523,7 +794,7 @@ fn worley_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
 // =======================================================
 // フラクタル合成
 // =======================================================
-fn fbm(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
+fn fbm_3d(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
     var sum = 0.0;
     var amplitude = 0.5;
     var frequency = 1.0;
@@ -533,7 +804,7 @@ fn fbm(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
     let persistence = 0.5;
 
     for (var i = 0u; i < octaves; i++) {
-        let n = simplex_noise(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
+        let n = simplex_noise_3d(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
 
         sum += n * amplitude;
         max_val += amplitude;
@@ -544,7 +815,7 @@ fn fbm(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
     return sum / max_val;
 }
 
-fn billow(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
+fn billow_3d(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
     var sum = 0.0;
     var amplitude = 0.5;
     var frequency = 1.0;
@@ -554,7 +825,7 @@ fn billow(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
     let persistence = 0.5;
 
     for (var i = 0u; i < octaves; i++) {
-        let n = value_noise(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
+        let n = value_noise_3d(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
         let v = abs(n * 2.0 - 1.0);
         sum += v * amplitude;
         max_val += amplitude;
@@ -565,7 +836,7 @@ fn billow(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
     return sum / max_val;
 }
 
-fn ridged(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
+fn ridged_3d(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
     var sum = 0.0;
     var amplitude = 0.5;
     var frequency = 1.0;
@@ -575,7 +846,7 @@ fn ridged(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
     let persistence = 0.5;
 
     for (var i = 0u; i < octaves; i++) {
-        let n = value_noise(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
+        let n = value_noise_3d(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
         var v = 1.0 - abs(n * 2.0 - 1.0);
         v = v * v;
         v = v * weight;
@@ -600,7 +871,7 @@ fn ridged(x: f32, y: f32, z: f32, seed: i32, octaves: u32) -> f32 {
 // ドメインワーピング
 // =======================================================
 
-fn scaling(x: f32, y: f32, z: f32) -> vec3f {
+fn scaling_3d(x: f32, y: f32, z: f32) -> vec3f {
     let sx = x / SCALE;
     let sy = y / SCALE;
     let sz = z / SCALE;
@@ -608,17 +879,17 @@ fn scaling(x: f32, y: f32, z: f32) -> vec3f {
     return vec3f(sx, sy, sz);
 }
 
-fn dw_fbm_value(sc: vec3f, amplitude: f32, seed: i32) -> f32 {
-    let dx = value_noise(sc.x, sc.y, sc.z, seed) * amplitude;
-    let dy = value_noise(sc.x, sc.y, sc.z, seed + 1) * amplitude;
-    let dz = value_noise(sc.x, sc.y, sc.z, seed + 2) * amplitude;
+fn dw_fbm_value_3d(sc: vec3f, amplitude: f32, seed: i32) -> f32 {
+    let dx = value_noise_3d(sc.x, sc.y, sc.z, seed) * amplitude;
+    let dy = value_noise_3d(sc.x, sc.y, sc.z, seed + 1) * amplitude;
+    let dz = value_noise_3d(sc.x, sc.y, sc.z, seed + 2) * amplitude;
 
     let p = vec3f(sc.x + dx, sc.y + dy, sc.z + dz);
 
-    return fbm(p.x, p.y, p.z, seed + 3, 4);
+    return fbm_3d(p.x, p.y, p.z, seed + 3, 4);
 }
 
-fn pink_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+fn pink_noise_3d(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     var sum = 0.0;
     var amplitude = 0.5;
     var frequency = 1.0;
@@ -627,7 +898,7 @@ fn pink_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     let persistence = 0.5;
 
     for (var i = 0u; i < 6u; i = i + 1u) {
-        let n = simplex_noise(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
+        let n = simplex_noise_3d(x * frequency, y * frequency, z * frequency, seed + i32(i) * 131i);
         sum += n * amplitude;
         max_val += amplitude;
         amplitude *= persistence;
@@ -636,10 +907,10 @@ fn pink_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     return sum / max_val;
 }
 
-fn blue_noise(x: f32, y: f32, z: f32, seed: i32) -> f32 {
+fn blue_noise_3d(x: f32, y: f32, z: f32, seed: i32) -> f32 {
     let p = vec3f(x, y, z);
     let white = hash3d(p, seed);
-    let low = value_noise(x, y, z, seed);
+    let low = value_noise_3d(x, y, z, seed);
     return clamp(white - low + 0.5, 0.0, 1.0);
 }
 
@@ -648,26 +919,26 @@ fn bias(h: f32) -> f32 {
     return h / ((1.0/b-2.0)*(1.0-h)+1.0);
 }
 
-fn get_height(x: f32, y: f32, z: f32, seed: i32) -> i32 {    
-    let sc = scaling(x, y, z);
-    let n = ridged(sc.x, 0.0, sc.z, seed, 2u);
+fn get_height(x: f32, z: f32, seed: i32) -> i32 {    
+    let sc = scaling(x, z);
+    let n = ridged(sc.x, sc.y, seed, 2u);
     let r = n * n * 300.0;
 
     return i32(round(r));
-    // let sc = scaling(x, 0.0, z);
-    // let n = simplex_noise(sc.x, 0.0, sc.z, seed);
-    // let sx = sc.x;
-    // let sz = sc.z;
+    // let sc_old = scaling(x, z);
+    // let n = simplex_noise(sc_old.x, sc_old.y, seed);
+    // let sx = sc_old.x;
+    // let sz = sc_old.y;
     // let o: u32 = u32(n * 10.0);
 
     // var h: f32;
     // if (n <= 0.2) {
-    //     h = value_noise(sx, 0.0, sz, seed);
+    //     h = value_noise(sx, sz, seed);
     // } else if (n <= 0.5) {
-    //     h = fbm(sx, 0.0, sz, seed, o);
+    //     h = fbm(sx, sz, seed, o);
     // } else {
-    //     h = dw_fbm_value(sc, 1.0, seed);
+    //     h = dw_fbm_value(sc_old, 1.0, seed);
     // }
 
-    // return i32(round(h * (MOUNTAIN_HEIGHT*(bias(ridged(sx, 0.0, sz, seed, o+1))))));
+    // return i32(round(h * (MOUNTAIN_HEIGHT*(bias(ridged(sx, sz, seed, o+1))))));
 }
