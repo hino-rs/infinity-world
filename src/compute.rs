@@ -1,12 +1,20 @@
 use std::sync::mpsc;
 
+use glam::USizeVec2;
 use wgpu::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer, BufferAddress, BufferBindingType, BufferDescriptor, BufferUsages, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device, MapMode, PipelineLayoutDescriptor, Queue, ShaderModuleDescriptor, ShaderSource, ShaderStages, util::{BufferInitDescriptor, DeviceExt}, wgt::CommandEncoderDescriptor,
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
+    BindGroupLayoutEntry, BindingType, Buffer, BufferAddress, BufferBindingType, BufferDescriptor,
+    BufferUsages, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device,
+    MapMode, PipelineLayoutDescriptor, Queue, ShaderModuleDescriptor, ShaderSource, ShaderStages,
+    util::{BufferInitDescriptor, DeviceExt},
+    wgt::CommandEncoderDescriptor,
 };
 
-use crate::{consts::{BATCH_SIZE, NUM_CHUNK_BLOCKS}, game::BlockType};
 use crate::types::*;
-
+use crate::{
+    consts::{BATCH_SIZE, NUM_CHUNK_BLOCKS},
+    game::BlockType,
+};
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default)]
@@ -24,6 +32,14 @@ impl ChunkUniforms {
     }
 }
 
+/// 環境データ
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default)]
+pub struct EnvData {
+    pub temp_and_mois: u32,      // 気温と湿潤度
+    pub wind_dir_and_speed: u32, // 風の向きと速度
+}
+
 pub struct Compute {
     blocks_staging_buffer: Buffer,
     env_staging_buffer: Buffer,
@@ -37,7 +53,7 @@ pub struct Compute {
     env_data_size: BufferAddress,
     chunkmaker_uniform_buffer: Buffer,
 }
-    
+
 impl Compute {
     pub fn build(device: &Device) -> Self {
         let (
@@ -71,11 +87,23 @@ impl Compute {
 
     pub fn build_chunk_maker(
         device: &Device,
-    ) -> (Buffer, Buffer, BindGroup, ComputePipeline, ComputePipeline, ComputePipeline, Buffer, Buffer, BufferAddress, BufferAddress, Buffer) {
-        let init_chunk = vec![0; NUM_CHUNK_BLOCKS * BATCH_SIZE];
-        let init_env = vec![0u32; BATCH_SIZE];
+    ) -> (
+        Buffer,
+        Buffer,
+        BindGroup,
+        ComputePipeline,
+        ComputePipeline,
+        ComputePipeline,
+        Buffer,
+        Buffer,
+        BufferAddress,
+        BufferAddress,
+        Buffer,
+    ) {
+        let init_chunk = vec![0u32; NUM_CHUNK_BLOCKS * BATCH_SIZE];
+        let init_env = vec![EnvData::default(); BATCH_SIZE];
         let size = (init_chunk.len() * std::mem::size_of::<u32>()) as BufferAddress;
-        let env_size = (init_env.len() * std::mem::size_of::<u32>()) as BufferAddress;
+        let env_size = (init_env.len() * std::mem::size_of::<EnvData>()) as BufferAddress;
 
         let blocks_storage_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Blocks Storage Buffer"),
@@ -180,7 +208,7 @@ impl Compute {
             label: Some("Biome Shader"),
             source: ShaderSource::Wgsl(include_str!("biome.wgsl").into()),
         });
-        
+
         let terrain_shader = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Terrain Shader"),
             source: ShaderSource::Wgsl(include_str!("terrain.wgsl").into()),
@@ -305,21 +333,17 @@ impl Compute {
         });
     }
 
-    pub fn read_env(&self) -> Vec<u32> {
+    pub fn read_env(&self) -> Vec<EnvData> {
         let slice = self.env_staging_buffer.slice(..);
         let env_data = slice.get_mapped_range();
-        let env_result: &[u32] = unsafe {
-            std::slice::from_raw_parts(
-                env_data.as_ptr() as *const u32,
-                BATCH_SIZE,
-            )
-        };
+        let env_result: &[EnvData] =
+            unsafe { std::slice::from_raw_parts(env_data.as_ptr() as *const EnvData, BATCH_SIZE) };
 
         let data = env_result.to_vec();
 
         drop(env_data);
         self.env_staging_buffer.unmap();
-        
+
         data
     }
 
@@ -345,21 +369,21 @@ impl Compute {
             let start = i * NUM_CHUNK_BLOCKS;
             let end = start + NUM_CHUNK_BLOCKS;
             let chunk_slice = &chunk_result[start..end];
-            
+
             let blocks: Box<ChunkBlocks> = Box::new(chunk_slice.try_into().unwrap());
             chunks.push(blocks);
         }
-        
+
         drop(chunk_data);
         self.blocks_staging_buffer.unmap();
-        
+
         chunks
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use wgpu::{Instance, RequestAdapterOptions, PowerPreference, Limits, DeviceDescriptor};
+    use wgpu::{DeviceDescriptor, Instance, Limits, PowerPreference, RequestAdapterOptions};
 
     #[test]
     fn test_shader_compilation() {
@@ -375,15 +399,13 @@ mod tests {
                 .expect("アダプター作成に失敗");
 
             let (device, _queue) = adapter
-                .request_device(
-                    &DeviceDescriptor {
-                        label: None,
-                        required_features: wgpu::Features::empty(),
-                        required_limits: Limits::default(),
-                        memory_hints: Default::default(),
-                        ..Default::default()
-                    },
-                )
+                .request_device(&DeviceDescriptor {
+                    label: None,
+                    required_features: wgpu::Features::empty(),
+                    required_limits: Limits::default(),
+                    memory_hints: Default::default(),
+                    ..Default::default()
+                })
                 .await
                 .expect("デバイス作成に失敗");
 

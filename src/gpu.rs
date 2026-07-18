@@ -2,7 +2,14 @@ use std::sync::Arc;
 
 use winit::window::Window;
 
-use crate::{camera::{Camera, CameraGpu}, fps::FpsCounter, pipeline::PipelineRegistry, render_info::RenderInfo, terrain::Terrain, utils::calc_humidity};
+use crate::{
+    camera::{Camera, CameraGpu},
+    fps::FpsCounter,
+    pipeline::PipelineRegistry,
+    render_info::RenderInfo,
+    terrain::Terrain,
+    utils::calc_humidity,
+};
 
 use wgpu_text::{
     TextBrush,
@@ -33,7 +40,11 @@ impl GpuContext {
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: if fullpower { wgpu::PowerPreference::HighPerformance } else { wgpu::PowerPreference::default() },
+                power_preference: if fullpower {
+                    wgpu::PowerPreference::HighPerformance
+                } else {
+                    wgpu::PowerPreference::default()
+                },
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -60,7 +71,11 @@ impl GpuContext {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: if vsync { wgpu::PresentMode::AutoVsync } else { wgpu::PresentMode::AutoNoVsync },
+            present_mode: if vsync {
+                wgpu::PresentMode::AutoVsync
+            } else {
+                wgpu::PresentMode::AutoNoVsync
+            },
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -76,10 +91,10 @@ impl GpuContext {
     }
 
     pub fn resize(
-        &mut self, 
+        &mut self,
         new_size: winit::dpi::PhysicalSize<u32>,
         render_info: &mut RenderInfo,
-        brush: &mut TextBrush<FontArc>
+        brush: &mut TextBrush<FontArc>,
     ) {
         if new_size.width > 0 && new_size.height > 0 {
             self.config.width = new_size.width;
@@ -87,8 +102,7 @@ impl GpuContext {
             // サーフェス（描画ウィンドウ）のサイズ再設定
             self.surface.configure(&self.device, &self.config);
             // テキストブラシにプロジェクションサイズ変更を通知
-            brush
-                .resize_view(new_size.width as f32, new_size.height as f32, &self.queue);
+            brush.resize_view(new_size.width as f32, new_size.height as f32, &self.queue);
             // ウィンドウサイズに応じた大きさで深度テクスチャを再生成
             let (depth_texture, depth_view) =
                 RenderInfo::create_depth_texture(&self.device, &self.config);
@@ -104,7 +118,7 @@ impl GpuContext {
     }
 
     pub fn render(
-        &self, 
+        &self,
         render_info: &RenderInfo,
         pipelines: &PipelineRegistry,
         camera_gpu: &CameraGpu,
@@ -114,6 +128,8 @@ impl GpuContext {
         brush: &mut TextBrush<FontArc>,
         temp: f32,
         mois: f32,
+        wind_dir: f32,
+        wind_speed: f32,
     ) {
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
@@ -188,7 +204,7 @@ impl GpuContext {
                     render_pass.set_vertex_buffer(0, chunk.vertex_buffer.slice(..));
                     render_pass
                         .set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                    
+
                     render_pass.draw_indexed(0..chunk.num_indices, 0, 0..1);
                 }
             }
@@ -203,20 +219,21 @@ impl GpuContext {
 
         // ポストプロセッシング（フォグ）パスを実行
         {
-            let post_process_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &pipelines.post_process_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&render_info.color_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&render_info.depth_view),
-                    },
-                ],
-                label: Some("Post Process Bind Group"),
-            });
+            let post_process_bind_group =
+                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &pipelines.post_process_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&render_info.color_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&render_info.depth_view),
+                        },
+                    ],
+                    label: Some("Post Process Bind Group"),
+                });
 
             let mut post_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Post Process Render Pass"),
@@ -247,13 +264,16 @@ impl GpuContext {
             post_pass.draw(0..3, 0..1); // 全画面三角形を描画
         }
 
-        
         // テキスト情報を構築してキューに追加
         let fps_text = format!("FPS: {:.0}", &fps.fps());
         let coord = camera.xyz();
         let coord_text = format!("{:.0}, {:.0}, {:.0}", coord.0, coord.1, coord.2);
         let env_data = calc_humidity(mois, temp);
-        let env_text = format!("気温: {:.1}, 湿潤度: {:.1} 相対湿度: {:.1}, 絶対湿度: {:.1}", temp, mois, env_data.0, env_data.1);
+        let wind_dir = radian_to_direction(wind_dir);
+        let env_text = format!(
+            "気温: {:.1}, 湿潤度: {:.1} 相対湿度: {:.1}, 絶対湿度: {:.1}\n風向き: {}, 風速: {:.1}",
+            temp, mois, env_data.0, env_data.1, wind_dir, wind_speed
+        );
         let num_added_chunks_text = format!("追加済みチャンク数: {}", terrain.chunks.len());
 
         let fps_section = TextSection::default()
@@ -272,24 +292,33 @@ impl GpuContext {
             )
             .with_screen_position((10.0, 30.0));
 
+        let num_added_chunks = TextSection::default()
+            .add_text(
+                Text::new(&num_added_chunks_text)
+                    .with_scale(20.0)
+                    .with_color([0.0, 0.0, 0.0, 1.0]),
+            )
+            .with_screen_position((10.0, 50.0));
+
         let env_section = TextSection::default()
             .add_text(
                 Text::new(&env_text)
                     .with_scale(20.0)
                     .with_color([0.0, 0.0, 0.0, 1.0]),
             )
-            .with_screen_position((10.0, 50.0));
-
-        let num_added_chunks = TextSection::default()
-            .add_text(
-                Text::new(&num_added_chunks_text)
-                    .with_scale(20.0)
-                    .with_color([0.0, 0.0, 0.0, 1.0])
-            )
             .with_screen_position((10.0, 70.0));
 
         brush
-            .queue(&self.device, &self.queue, [&fps_section, &coord_section, &env_section, &num_added_chunks])
+            .queue(
+                &self.device,
+                &self.queue,
+                [
+                    &fps_section,
+                    &coord_section,
+                    &env_section,
+                    &num_added_chunks,
+                ],
+            )
             .unwrap();
 
         {
@@ -317,5 +346,32 @@ impl GpuContext {
         self.queue.submit(std::iter::once(encoder.finish()));
         // 画面の更新（フリップ）
         frame.present();
+    }
+}
+
+/// ラジアンから16方位の文字列に変換する
+fn radian_to_direction(rad: f32) -> &'static str {
+    let deg = rad.to_degrees();
+    let normalized_deg = deg.rem_euclid(360.0);
+    let index = (((normalized_deg + 11.25) / 22.5) as usize) % 16;
+    
+    match index {
+        0 => "北",
+        1 => "北北東",
+        2 => "北東",
+        3 => "東北東",
+        4 => "東",
+        5 => "東南東",
+        6 => "南東",
+        7 => "南南東",
+        8 => "南",
+        9 => "南南西",
+        10 => "南西",
+        11 => "西南西",
+        12 => "西",
+        13 => "西北西",
+        14 => "北西",
+        15 => "北北西",
+        _ => unreachable!(),
     }
 }

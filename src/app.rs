@@ -57,6 +57,8 @@ pub struct Application {
     pub env_tx: mpsc::Sender<Result<(), wgpu::BufferAsyncError>>,
     pub current_temp: f32,
     pub current_mois: f32,
+    pub current_wind_dir: f32,
+    pub current_wind_speed: f32,
 }
 
 impl Application {
@@ -82,8 +84,11 @@ impl Application {
             gpu_env_in_progress: false,
             env_rx,
             env_tx,
+
             current_temp: 0.0,
             current_mois: 0.0,
+            current_wind_dir: 0.0,
+            current_wind_speed: 0.0,
         }
     }
 }
@@ -228,16 +233,10 @@ impl ApplicationHandler for Application {
                     pipelines.update_general_uniform(&gpu.queue, time);
 
                     // ワールド状態を進める
-                    world.update(
-                        dt,
-                        &gpu.device,
-                        compute,
-                        &gpu.queue,
-                    );
+                    world.update(dt, &gpu.device, compute, &gpu.queue);
                     camera_gpu.update(&gpu.queue, &world.camera);
                     let _delta = self.fps.tick();
                     let _ = gpu.device.poll(wgpu::PollType::Poll);
-                    
 
                     if self.gpu_env_in_progress {
                         match self.env_rx.try_recv() {
@@ -245,10 +244,17 @@ impl ApplicationHandler for Application {
                                 let envs = compute.read_env();
                                 if !envs.is_empty() {
                                     let packed = envs[0];
-                                    let temp_bits = (packed & 0xffff) as u16;
-                                    let mois_bits = ((packed >> 16) & 0xffff) as u16;
+                                    // --- 気温と湿潤度 ---
+                                    let temp_bits = (packed.temp_and_mois & 0xffff) as u16;
+                                    let mois_bits = ((packed.temp_and_mois >> 16) & 0xffff) as u16;
                                     self.current_temp = f16::from_bits(temp_bits).to_f32();
                                     self.current_mois = f16::from_bits(mois_bits).to_f32();
+                                    // --- 風の向きと速度 ---
+                                    let wind_dir_bits = (packed.wind_dir_and_speed & 0xffff) as u16;
+                                    let wind_speed_bits =
+                                        ((packed.wind_dir_and_speed >> 16) & 0xffff) as u16;
+                                    self.current_wind_dir = f16::from_bits(wind_dir_bits).to_f32();
+                                    self.current_wind_speed = f16::from_bits(wind_speed_bits).to_f32();
                                 }
                                 self.gpu_env_in_progress = false;
                             }
@@ -264,7 +270,7 @@ impl ApplicationHandler for Application {
                             }
                         }
                     }
-                    
+
                     if !self.gpu_env_in_progress {
                         let cp = world.player.current_chunk_pos();
                         let mut chunk_uniforms = vec![ChunkUniforms::new(world.seed); BATCH_SIZE];
@@ -287,8 +293,9 @@ impl ApplicationHandler for Application {
                         brush,
                         self.current_temp,
                         self.current_mois,
+                        self.current_wind_dir,
+                        self.current_wind_speed,
                     );
-
 
                     window.request_redraw();
                 }

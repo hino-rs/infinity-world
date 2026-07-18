@@ -19,13 +19,20 @@ const OCTAVES: u32 = 1;
 // const SCALE: f32 = 32768.0;
 const SCALE: f32 = pow(2.0, 16);
 
+const TWO_PI: f32 = 6.28318530718;
+
 struct ChunkUniforms {
     chunk_pos: vec3i,
     seed: i32,
 }
 
+struct EnvData {
+    temp_and_mois: u32, // 気温と湿潤度
+    wind_dir_and_speed: u32, // 風の向きと速度
+}
+
 @group(0) @binding(0) var<storage, read> uniforms: array<ChunkUniforms>;
-@group(0) @binding(2) var<storage, read_write> env_data: array<u32>;
+@group(0) @binding(2) var<storage, read_write> env_storage: array<EnvData>;
 
 
 fn calc_saturated_water(temp: f32) -> f32 {
@@ -48,14 +55,27 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let sx = wx / SCALE;
     let sz = wz / SCALE;
 
-    // 海面の気温
-    var rt = fbm(sx, sz, seed + 5);
-    let sealevel_temperature = mix(MIN_TEMP, MAX_TEMP, rt) + 10.0;
 
-    // 湿潤度
-    var moisture = rt;
 
-    env_data[chunk_idx] = pack2x16float(vec2f(sealevel_temperature, moisture));
+    var env_data: EnvData;
+    env_data.temp_and_mois = get_temp_and_mois(sx, sz, seed);
+    env_data.wind_dir_and_speed = get_wind(sx, sz, seed);
+
+    env_storage[chunk_idx] = env_data;
+}
+
+fn get_temp_and_mois(sx: f32, sz: f32, seed: i32) -> u32 {
+    var r = fbm(sx, sz, seed + 5);
+    let sealevel_temperature = mix(MIN_TEMP, MAX_TEMP, r) + 10.0;
+    var moisture = r;
+    return pack2x16float(vec2f(sealevel_temperature, moisture));
+}
+
+fn get_wind(sx: f32, sz: f32, seed: i32) -> u32 {
+    let r = fbm(sx, sz, seed + 7);
+    let dir = r * TWO_PI;
+    let vol = fbm(sx, sz, seed + 7) * 5;
+    return pack2x16float(vec2f(dir, vol));
 }
 
 fn hash2d(p: vec2f, seed: i32) -> f32 {
