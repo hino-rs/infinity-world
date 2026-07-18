@@ -64,4 +64,5 @@ pub enum BlockType {
     QuartzVein   = 153, // 石英脈
 
     // --- その他・テスト: 190~ ---
+    Wood = 190,
 }

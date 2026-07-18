@@ -99,6 +99,9 @@ fn vs_main(
         case 152u:  { base_color = vec4f(0.65, 0.25, 0.15, 1.0); }    // IronStain
         case 153u:  { base_color = vec4f(0.88, 0.90, 0.92, 1.0); }    // QuartzVein
 
+        // --- その他 ---
+        case 190u:  { base_color = vec4f(0.48, 0.40, 0.24, 1.0); }    // Wood
+
         default:    { base_color = vec4f(1.0, 0.0, 1.0, 1.0); }       // 例外
     }
 
@@ -121,15 +124,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
     let light_factor = diff * 0.8 + 0.2;
 
     color = vec4f(color.rgb * light_factor, color.a);
-
-    // let thickness = 0.01; 
-    // let lineColor = vec3(0.0, 0.0, 0.0); // 線の色（黒）
-
-    // // XまたはYが端っこに近いか判定
-    // if (in.tex_coords.x < thickness || in.tex_coords.x > 1.0 - thickness ||
-    //     in.tex_coords.y < thickness || in.tex_coords.y > 1.0 - thickness) {
-    //     color -= 0.1;
-    // }
 
     return color;
 }

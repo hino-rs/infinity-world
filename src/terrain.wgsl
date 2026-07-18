@@ -250,6 +250,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let wind = unpack2x16float(env_data.wind_dir_and_speed);
     let biome_idx = get_biome_id(env.x, env.y);
 
+    // たまに木を生やす
+    let tree_r = hash2d(vec2f(wx, wz), seed + 39);
+
     for (var y = 0u; y < CHUNK_SIZE_U; y++) {
         let wy = uniforms[chunk_idx].chunk_pos.y * CHUNK_SIZE_I + i32(y);
         let index = chunk_offset + y * (CHUNK_SIZE_U * CHUNK_SIZE_U) + x * CHUNK_SIZE_U + z;
@@ -260,7 +263,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         } else if wy < SEA_LEVEL {
             blocks[index] = 100u;
         } else {
-            blocks[index] = 0u;
+            if (tree_r > 0.99) && (wy < h + 5) {
+                blocks[index] = 190u;
+            } else {
+                blocks[index] = 0u;
+            }
         }
     }
 }

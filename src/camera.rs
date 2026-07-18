@@ -92,13 +92,13 @@ impl Camera {
         IVec3::new(cx, cy, cz)
     }
 
-    /// マウスの移動量からカメラの向き角を更新し、ピッチ角が真上・真下を向かないよう（±89度）制限する
+    /// マウスの移動量からカメラの向き角を更新し、ピッチ角が真上・真下を向かないよう制限する
     pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
         // マウスの移動量をカメラに反映する
         self.yaw = (self.yaw + (mouse_dx as f32) * self.sensitivity).rem_euclid(TAU);
         self.pitch -= (mouse_dy as f32) * self.sensitivity;
 
-        let limit = 89.0f32.to_radians();
+        let limit = 60.0f32.to_radians();
         if self.pitch < -limit {
             self.pitch = -limit;
         } else if self.pitch > limit {
