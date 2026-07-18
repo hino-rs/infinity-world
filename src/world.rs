@@ -63,13 +63,12 @@ impl World {
         compute: &Compute,
         queue: &Queue,
     ) {
-        // このフレームの希望移動量を計算 コントローラーは前フレームのon_groundを参照する
-        let delta = self
-            .player_controller
-            .compute_move(&mut self.player, &self.camera, dt);
+        // このフレームの速度を更新 コントローラーは前フレームのon_groundを参照する
+        self.player_controller
+            .update_velocity(&mut self.player, &self.camera, dt);
 
         // 軸分離で実際に動かす
-        let on_ground = self.player.move_player(delta, &self.terrain);
+        let on_ground = self.player.move_player(dt, &self.terrain);
 
         // 接地状態をコントローラーに書き戻す
         self.player_controller.on_ground = on_ground;

@@ -8,14 +8,13 @@ use glam::*;
 
 pub struct Player {
     pub position: Vec3,
-    velocity_y: f32,
+    pub velocity: Vec3,
     pub current_chunk_pos: IVec3,
 }
 
 #[derive(Default)]
 pub struct PlayerController {
     pub speed: f32,
-    pub velocity_y: f32,
     pub is_forward_pressed: bool,
     pub is_backward_pressed: bool,
     pub is_left_pressed: bool,
@@ -36,7 +35,7 @@ impl Player {
 
         Self {
             position,
-            velocity_y: 0.0,
+            velocity: Vec3::ZERO,
             current_chunk_pos: IVec3::new(cx, cy, cz),
         }
     }
@@ -84,13 +83,16 @@ impl Player {
         }
     }
 
-    pub fn move_player(&mut self, delta: Vec3, terrain: &Terrain) -> bool {
+    pub fn move_player(&mut self, dt: f32, terrain: &Terrain) -> bool {
         let mut on_ground = false;
+        let delta = self.velocity * dt;
+
         // --- X軸（壁判定・横） ---
         let tmp = self.position.x;
         self.position.x += delta.x;
         if terrain.collides_at(&self.get_aabb_full()) {
             self.position.x = tmp;
+            self.velocity.x = 0.0;
         }
 
         // --- Z軸（壁判定・奥行き） ---
@@ -98,6 +100,7 @@ impl Player {
         self.position.z += delta.z;
         if terrain.collides_at(&self.get_aabb_full()) {
             self.position.z = tmp;
+            self.velocity.z = 0.0;
         }
 
         // --- Y軸（地面・天井） ---
@@ -110,7 +113,7 @@ impl Player {
                 on_ground = true; // 下向きで衝突 → 着地
             }
             // 上向きで衝突なら頭をぶつけた。いずれも縦速度を0へ
-            self.velocity_y = 0.0;
+            self.velocity.y = 0.0;
         }
 
         on_ground
@@ -118,23 +121,23 @@ impl Player {
 }
 
 impl PlayerController {
-    // 入力と重力から、このフレームの移動量を計算して返す。
-    pub fn compute_move(&mut self, player: &mut Player, camera: &Camera, dt: f32) -> Vec3 {
+    // 入力と重力から、このフレームの速度を更新する。
+    pub fn update_velocity(&mut self, player: &mut Player, camera: &Camera, dt: f32) {
         // Tボタンが押されていたら上空へ 
         if self.teleport {
             player.position.y = 500.0;
-            return Vec3::ZERO;
+            player.velocity = Vec3::ZERO;
+            return;
         }
 
         // 地面に水平な前方・右方向
         let (sin_yaw, cos_yaw) = camera.yaw.sin_cos();
-        let forward_ground = Vec3::new(sin_yaw, 0.0, -cos_yaw).normalize();
-        let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize();
+        let forward_ground = Vec3::new(sin_yaw, 0.0, -cos_yaw).normalize_or_zero();
+        let right_ground = Vec3::new(cos_yaw, 0.0, sin_yaw).normalize_or_zero();
 
         // ダッシュボタン(長押しで加速していく)
         self.speed = if self.is_dash_pressed {
-            self.speed = (self.speed * 1.05).min(250.0);
-            self.speed
+            (self.speed * 1.05).min(250.0)
         } else {
             PLAYER_WALK_SPEED
         };
@@ -154,47 +157,66 @@ impl PlayerController {
             move_dir -= right_ground;
         }
 
-        // 水平移動量（斜めも同じ速さになるよう正規化）
-        let horizontal = if move_dir != Vec3::ZERO {
-            move_dir.normalize() * self.speed * dt
-        } else {
-            Vec3::ZERO
-        };
+        let input_dir = move_dir.normalize_or_zero();
 
-        // --- 縦方向 ---
-        // 浮遊なら接地関係なしに上下させるだけ
+        // --- 速度計算 ---
         if self.floating {
-            self.velocity_y = 0.0;
+            // 浮遊なら接地関係なしに上下させるだけ
+            let mut fly_vel_y = 0.0;
             if self.is_up_pressed {
-                self.velocity_y = if self.is_dash_pressed {
+                fly_vel_y = if self.is_dash_pressed && !self.on_ground {
                     (7.5 * self.speed).min(30.0)
                 } else {
                     7.5
                 };
             }
             if self.is_down_pressed {
-                self.velocity_y = if self.is_dash_pressed {
+                fly_vel_y = if self.is_dash_pressed {
                     (-7.5 * self.speed).max(-30.0)
                 } else {
                     -7.5
                 };
             }
+
+            let target_vel = input_dir * self.speed + Vec3::Y * fly_vel_y;
+            let decay = 8.0;
+            let factor = 1.0 - (-decay * dt).exp();
+            player.velocity = player.velocity.lerp(target_vel, factor);
         } else {
+            // 通常移動時の水平速度の加減速
+            let current_h = Vec3::new(player.velocity.x, 0.0, player.velocity.z);
+            let target_h = input_dir * self.speed;
+
+            let decay = if self.on_ground {
+                if input_dir != Vec3::ZERO {
+                    12.0 // 地上加速
+                } else {
+                    30.0 // 地上摩擦
+                }
+            } else {
+                if input_dir != Vec3::ZERO {
+                    2.5 // 空中加速
+                } else {
+                    1.0 // 空中摩擦
+                }
+            };
+            let factor = 1.0 - (-decay * dt).exp();
+            let new_h = current_h.lerp(target_h, factor);
+            player.velocity.x = new_h.x;
+            player.velocity.z = new_h.z;
+
             // 接地中はジャンプ受付、空中は重力
             if self.on_ground {
                 if self.is_up_pressed {
-                    self.velocity_y = 7.5; // ジャンプ初速
+                    player.velocity.y = 6.0; // ジャンプ初速
                 } else {
-                    self.velocity_y = 0.0;
+                    player.velocity.y = 0.0;
                 }
             } else {
                 let gravity = 18.0;
-                self.velocity_y -= gravity * dt;
+                player.velocity.y -= gravity * dt;
             }
         }
-        let vertical = self.velocity_y * dt;
-
-        Vec3::new(horizontal.x, vertical, horizontal.z)
     }
 
     pub fn process_keyboard(
