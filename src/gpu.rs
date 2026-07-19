@@ -124,6 +124,7 @@ impl GpuContext {
         camera_gpu: &CameraGpu,
         terrain: &Terrain,
         camera: &Camera,
+        player: &crate::player::Player,
         fps: &FpsCounter,
         brush: &mut TextBrush<FontArc>,
         temp: f32,
@@ -158,6 +159,7 @@ impl GpuContext {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
+
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -208,6 +210,14 @@ impl GpuContext {
                     render_pass.draw_indexed(0..chunk.num_indices, 0, 0..1);
                 }
             }
+
+            // プレイヤーの胴体を描画する
+            render_pass.set_pipeline(&pipelines.player_render_pipeline);
+            render_pass.set_bind_group(0, &pipelines.general_uniform_bind_group, &[]);
+            render_pass.set_bind_group(1, &camera_gpu.bind_group, &[]);
+            render_pass.set_vertex_buffer(0, player.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(player.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..player.num_indices, 0, 0..1);
 
             // パイプラインを空描画用に切り替える
             render_pass.set_pipeline(&pipelines.sky_render_pipeline);

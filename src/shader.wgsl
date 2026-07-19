@@ -7,6 +7,7 @@ struct CameraUniform {
 
 struct GeneralUniforms {
     time: f32,
+    player_pos: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> g_u: GeneralUniforms;
@@ -177,5 +178,49 @@ fn render_sky(view_dir: vec3f, sun_dir: vec3f) -> vec3f {
     let sun_color = vec3f(1.0, 0.9, 0.7) * sun_size + vec3f(1.0, 0.6, 0.3) * sun_glow;
 
     return sky_color + sun_color;
+}
+
+struct PlayerVertexInput {
+    @location(0) position: vec3f,
+    @location(1) color: vec3f,
+    @location(2) normal: vec3f,
+};
+
+struct PlayerVsOut {
+    @builtin(position) clip_pos: vec4f,
+    @location(0) color: vec4f,
+    @location(1) normal: vec3f,
+};
+
+@vertex
+fn vs_player(
+    model: PlayerVertexInput,
+) -> PlayerVsOut {
+    var out: PlayerVsOut;
+    
+    let world_pos = model.position + g_u.player_pos.xyz;
+    out.clip_pos = camera.view_proj * vec4f(world_pos, 1.0);
+    out.color = vec4f(model.color, 1.0);
+    out.normal = model.normal;
+
+    return out;
+}
+
+@fragment
+fn fs_player(in: PlayerVsOut) -> @location(0) vec4f {
+    var color = in.color;
+
+    let x = g_u.time * 0.1;
+    let sun_dir = normalize(vec3(cos(x), sin(x), 0.0));
+
+    // ランバート
+    let normal = normalize(in.normal);
+    let diff = max(dot(normal, sun_dir), 0.0);
+    
+    let light_factor = diff * 0.8 + 0.2;
+
+    color = vec4f(color.rgb * light_factor, color.a);
+
+    return color;
 }
 

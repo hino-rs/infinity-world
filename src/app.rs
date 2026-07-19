@@ -129,7 +129,8 @@ impl ApplicationHandler for Application {
         // ワールド
         let world = World::new(
             gpu.config.width as f32 / gpu.config.height as f32,
-            if self.option.touchpad { 0.03 } else { 0.003 }, // 感度
+            if self.option.touchpad { 0.03 } else { 0.003 }, // 感
+            &gpu.device,
         );
         // カメラのユニフォーム、バッファ、バインドグループ
         let camera_gpu = CameraGpu::new(
@@ -230,7 +231,7 @@ impl ApplicationHandler for Application {
                 ) {
                     let time = Instant::now().duration_since(self.time).as_secs_f32();
                     // GPUへ時間を伝える
-                    pipelines.update_general_uniform(&gpu.queue, time);
+                    pipelines.update_general_uniform(&gpu.queue, time, world.player.position);
 
                     // ワールド状態を進める
                     world.update(dt, &gpu.device, compute, &gpu.queue);
@@ -289,6 +290,7 @@ impl ApplicationHandler for Application {
                         camera_gpu,
                         &world.terrain,
                         &world.camera,
+                        &world.player,
                         &self.fps,
                         brush,
                         self.current_temp,

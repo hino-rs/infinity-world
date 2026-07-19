@@ -5,12 +5,88 @@ use crate::{
     utils::{Aabb, AabbFull},
 };
 use glam::*;
+use wgpu::util::DeviceExt;
 
 pub struct Player {
     pub position: Vec3,
     pub velocity: Vec3,
     pub current_chunk_pos: IVec3,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_indices: u32,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default)]
+pub struct PlayerVertex {
+    pub position: [f32; 3],
+    pub color: [f32; 3],
+    pub normal: [f32; 3],
+}
+
+impl PlayerVertex {
+    /// wgpu レンダリングパイプラインでこの頂点データ構造をどのように解釈するかを示すレイアウトを返す
+    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+        use std::mem;
+        const ATTRIBUTES: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
+            0 => Float32x3, // position
+            1 => Float32x3, // color
+            2 => Float32x3, // normal
+        ];
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<PlayerVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &ATTRIBUTES,
+        }
+    }
+}
+
+pub const PLAYER_VERTICES: &[PlayerVertex] = &[
+    // --- 前面 (Z = PLAYER_HALF_WIDTH) 法線: [0, 0, 1] ---
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH, -PLAYER_HEIGHT,  PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 0.0, 1.0] },  // 0
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH, -PLAYER_HEIGHT,  PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 0.0, 1.0] },  // 1
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH,  0.0,            PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 0.0, 1.0] },  // 2
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH,  0.0,            PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 0.0, 1.0] },  // 3
+
+    // --- 後ろ面 (Z = -PLAYER_HALF_WIDTH) 法線: [0, 0, -1] ---
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH, -PLAYER_HEIGHT, -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 0.0, -1.0] }, // 4
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH, -PLAYER_HEIGHT, -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 0.0, -1.0] }, // 5
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH,  0.0,           -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 0.0, -1.0] }, // 6
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH,  0.0,           -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 0.0, -1.0] }, // 7
+
+    // --- 左面 (X = -PLAYER_HALF_WIDTH) 法線: [-1, 0, 0] ---
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH, -PLAYER_HEIGHT, -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [-1.0, 0.0, 0.0] }, // 8
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH,  0.0,           -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [-1.0, 0.0, 0.0] }, // 9
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH,  0.0,            PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [-1.0, 0.0, 0.0] }, // 10
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH, -PLAYER_HEIGHT,  PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [-1.0, 0.0, 0.0] }, // 11
+
+    // --- 右面 (X = PLAYER_HALF_WIDTH) 法線: [1, 0, 0] ---
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH, -PLAYER_HEIGHT, -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [1.0, 0.0, 0.0] },  // 12
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH, -PLAYER_HEIGHT,  PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [1.0, 0.0, 0.0] },  // 13
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH,  0.0,            PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [1.0, 0.0, 0.0] },  // 14
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH,  0.0,           -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [1.0, 0.0, 0.0] },  // 15
+
+    // --- 上面 (Y = 0.0) 法線: [0, 1, 0] ---
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH,  0.0,           -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 1.0, 0.0] },  // 16
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH,  0.0,           -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 1.0, 0.0] },  // 17
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH,  0.0,            PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 1.0, 0.0] },  // 18
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH,  0.0,            PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, 1.0, 0.0] },  // 19
+
+    // --- 下面 (Y = -PLAYER_HEIGHT) 法線: [0, -1, 0] ---
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH, -PLAYER_HEIGHT, -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, -1.0, 0.0] }, // 20
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH, -PLAYER_HEIGHT, -PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, -1.0, 0.0] }, // 21
+    PlayerVertex { position: [ PLAYER_HALF_WIDTH, -PLAYER_HEIGHT,  PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, -1.0, 0.0] }, // 22
+    PlayerVertex { position: [-PLAYER_HALF_WIDTH, -PLAYER_HEIGHT,  PLAYER_HALF_WIDTH], color: [1.0; 3], normal: [0.0, -1.0, 0.0] }, // 23
+];
+
+pub const PLAYER_INDICES: &[u32] = &[
+    0,1,2,      0,2,3,        // 前面 (+Z)
+    4,7,6,      4,6,5,        // 後ろ面 (-Z)
+    8,11,10,    8,10,9,       // 左面 (-X)
+    12,15,14,   12,14,13,     // 右面 (+X)
+    16,19,18,   16,18,17,     // 上面 (+Y)
+    20,21,22,   20,22,23,     // 下面 (-Y)
+];
 
 #[derive(Default)]
 pub struct PlayerController {
@@ -28,15 +104,30 @@ pub struct PlayerController {
 }
 
 impl Player {
-    pub fn new(position: Vec3) -> Self {
+    pub fn new(position: Vec3, device: &wgpu::Device) -> Self {
         let cx = position.x.div_euclid(CHUNK_SIZE_F32) as i32;
         let cy = position.y.div_euclid(CHUNK_SIZE_F32) as i32;
         let cz = position.z.div_euclid(CHUNK_SIZE_F32) as i32;
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Player Vertex Buffer"),
+            contents: bytemuck::cast_slice(PLAYER_VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Player Index Buffer"),
+            contents: bytemuck::cast_slice(PLAYER_INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
 
         Self {
             position,
             velocity: Vec3::ZERO,
             current_chunk_pos: IVec3::new(cx, cy, cz),
+            vertex_buffer,
+            index_buffer,
+            num_indices: PLAYER_INDICES.len() as u32,
         }
     }
 

@@ -1,1 +1,4 @@
 /target
+ai/.venv
+ai/data
+ai

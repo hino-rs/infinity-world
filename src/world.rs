@@ -22,7 +22,7 @@ impl World {
     ///
     /// 1. アスペクト比: カメラ生成に必要です
     /// 2. 感度: 同上
-    pub fn new(aspect: f32, sensitivity: f32) -> World {
+    pub fn new(aspect: f32, sensitivity: f32, device: &wgpu::Device) -> World {
         let seed = rand::random::<i32>();
         let initial_position = Vec3::new(0.0, 100.0, 0.0);
 
@@ -37,7 +37,7 @@ impl World {
         );
 
         let terrain = Terrain::new();
-        let player = Player::new(initial_position);
+        let player = Player::new(initial_position, device);
         let player_controller = PlayerController::default();
 
         Self {
@@ -74,7 +74,12 @@ impl World {
         self.player_controller.on_ground = on_ground;
 
         // カメラをプレイヤー位置へ
-        self.camera.pursue_target(self.player.position);
+        // self.camera.pursue_target(self.player.position);
+        // カメラが向いている前方ベクトルを取得
+        let forward = self.camera.calc_forward();
+        let distance = 6.0; // カメラを後方に引く距離（お好みの値に調整してください）
+        // カメラの位置（eye）をプレイヤーの位置から後方に引き、かつ少し上に上げる（+ Y軸方向）と見やすくなります
+        self.camera.eye = self.player.position - forward * distance + glam::Vec3::Y * 1.5;
 
         // 視錐台生成とカリングのために現在地とカメラビュープロジェクション
         let player_pos = self.player.position.as_ivec3();

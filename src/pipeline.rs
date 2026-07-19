@@ -1,3 +1,4 @@
+use glam::Vec3;
 use wgpu::util::DeviceExt;
 
 pub struct PipelineRegistry {
@@ -11,13 +12,15 @@ pub struct PipelineRegistry {
     pub sky_render_pipeline: wgpu::RenderPipeline,   
     pub post_process_bind_group_layout: wgpu::BindGroupLayout,
     pub post_process_pipeline: wgpu::RenderPipeline,
+    pub player_render_pipeline: wgpu::RenderPipeline,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct GeneralUniform {
     time: f32,
-    _p1: [f32; 3],
+    _pad: [f32; 3],
+    player_pos: [f32; 4],
 }
 
 impl PipelineRegistry {
@@ -177,7 +180,8 @@ impl PipelineRegistry {
             label: Some("General Uniform Buffer"),
             contents: bytemuck::bytes_of(&GeneralUniform {
                 time: 0.0,
-                _p1: [0.,0.,0.],
+                _pad: [0.0; 3],
+                player_pos: [0.0; 4],
             }),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
@@ -270,6 +274,50 @@ impl PipelineRegistry {
             cache: None,
         });
 
+        let player_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Player Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_player"),
+                buffers: &[
+                    crate::player::PlayerVertex::desc(),
+                ],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_player"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: 1,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        });
+
         Self {
             general_uniform_bind_group_layout,
             camera_uniform_bind_group_layout,
@@ -281,16 +329,18 @@ impl PipelineRegistry {
             sky_render_pipeline,
             post_process_bind_group_layout,
             post_process_pipeline,
+            player_render_pipeline,
         }
     }
 
-    pub fn update_general_uniform(&self, queue: &wgpu::Queue, time: f32) {
+    pub fn update_general_uniform(&self, queue: &wgpu::Queue, time: f32, current_player_pos: Vec3) {
         queue.write_buffer(
             &self.general_uniform_buffer,
             0,
             bytemuck::bytes_of(&GeneralUniform {
                 time,
-                _p1: [0.0, 0.0, 0.0],
+                _pad: [0.0; 3],
+                player_pos: [current_player_pos.x, current_player_pos.y, current_player_pos.z, 1.0],
             }),
         );
     }
