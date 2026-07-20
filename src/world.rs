@@ -66,6 +66,9 @@ impl World {
         compute: &Compute,
         queue: &Queue,
     ) {
+        // カメラをプレイヤー位置へ
+        self.camera.pursue_target(self.player.position);
+        
         // このフレームの速度を更新 コントローラーは前フレームのon_groundを参照する
         self.player_controller
             .update_velocity(&mut self.player, &self.camera, dt);
@@ -75,9 +78,6 @@ impl World {
 
         // 接地状態をコントローラーに書き戻す
         self.player_controller.on_ground = on_ground;
-
-        // カメラをプレイヤー位置へ
-        self.camera.pursue_target(self.player.position);
 
         // 視錐台生成とカリングのために現在地とカメラビュープロジェクション
         let player_pos = self.player.position.as_ivec3();

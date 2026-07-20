@@ -285,14 +285,24 @@ impl GpuContext {
             temp, mois, env_data.0, env_data.1, wind_dir, wind_speed
         );
         let num_added_chunks_text = format!("追加済みチャンク数: {}", terrain.chunks.len());
+        let controls_text = String::from("WASD(移動), L-Shift(走る), F(浮遊), C(視点切り替え), T(テレポート 真上に飛びます)");
 
+        let controls_section = TextSection::default()
+            .add_text(
+                Text::new(&controls_text)
+                    .with_scale(20.0)
+                    .with_color([0.0, 0.0, 0.0, 1.0]),
+            )
+            .with_screen_position((10.0, 10.0));
+
+        
         let fps_section = TextSection::default()
             .add_text(
                 Text::new(&fps_text)
                     .with_scale(20.0)
                     .with_color([0.0, 0.0, 0.0, 1.0]),
             )
-            .with_screen_position((10.0, 10.0));
+            .with_screen_position((10.0, 30.0));
 
         let coord_section = TextSection::default()
             .add_text(
@@ -300,7 +310,7 @@ impl GpuContext {
                     .with_scale(20.0)
                     .with_color([0.0, 0.0, 0.0, 1.0]),
             )
-            .with_screen_position((10.0, 30.0));
+            .with_screen_position((10.0, 50.0));
 
         let num_added_chunks = TextSection::default()
             .add_text(
@@ -308,7 +318,7 @@ impl GpuContext {
                     .with_scale(20.0)
                     .with_color([0.0, 0.0, 0.0, 1.0]),
             )
-            .with_screen_position((10.0, 50.0));
+            .with_screen_position((10.0, 70.0));
 
         let env_section = TextSection::default()
             .add_text(
@@ -316,7 +326,8 @@ impl GpuContext {
                     .with_scale(20.0)
                     .with_color([0.0, 0.0, 0.0, 1.0]),
             )
-            .with_screen_position((10.0, 70.0));
+            .with_screen_position((10.0, 90.0));
+
 
         brush
             .queue(
@@ -324,6 +335,7 @@ impl GpuContext {
                 &self.queue,
                 [
                     &fps_section,
+                    &controls_section,
                     &coord_section,
                     &env_section,
                     &num_added_chunks,
