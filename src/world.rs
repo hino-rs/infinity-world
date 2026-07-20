@@ -7,6 +7,7 @@ use crate::consts::{FOV, Z_NEAR};
 use crate::player::{Player, PlayerController};
 use crate::terrain::Terrain;
 
+
 /// ワールド
 pub struct World {
     pub player: Player,
@@ -15,6 +16,7 @@ pub struct World {
     pub terrain: Terrain,
     pub seed: i32,
     pub ticks: u16,
+    
 }
 
 impl World {
@@ -34,6 +36,7 @@ impl World {
             FOV.to_radians(),
             Z_NEAR,
             sensitivity,
+            false,
         );
 
         let terrain = Terrain::new();
@@ -74,12 +77,7 @@ impl World {
         self.player_controller.on_ground = on_ground;
 
         // カメラをプレイヤー位置へ
-        // self.camera.pursue_target(self.player.position);
-        // カメラが向いている前方ベクトルを取得
-        let forward = self.camera.calc_forward();
-        let distance = 6.0; // カメラを後方に引く距離（お好みの値に調整してください）
-        // カメラの位置（eye）をプレイヤーの位置から後方に引き、かつ少し上に上げる（+ Y軸方向）と見やすくなります
-        self.camera.eye = self.player.position - forward * distance + glam::Vec3::Y * 1.5;
+        self.camera.pursue_target(self.player.position);
 
         // 視錐台生成とカリングのために現在地とカメラビュープロジェクション
         let player_pos = self.player.position.as_ivec3();

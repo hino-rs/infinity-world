@@ -186,6 +186,9 @@ impl ApplicationHandler for Application {
                             key_event.state.is_pressed(),
                             key_event.repeat,
                         );
+                        if keycode == KeyCode::KeyC && key_event.state.is_pressed() {
+                            world.camera.tps = !world.camera.tps;
+                        }
                     }
                 }
             }

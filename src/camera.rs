@@ -13,6 +13,7 @@ pub struct Camera {
     pub fovy: f32,
     pub znear: f32,
     pub sensitivity: f32,
+    pub tps: bool,
 }
 
 pub struct CameraGpu {
@@ -73,6 +74,7 @@ impl Camera {
         fovy: f32,
         znear: f32,
         sensitivity: f32,
+        tps: bool,
     ) -> Self {
         Self {
             eye,
@@ -82,6 +84,7 @@ impl Camera {
             fovy,
             znear,
             sensitivity,
+            tps,
         }
     }
 
@@ -168,7 +171,16 @@ impl Camera {
 
     /// ターゲットに追従
     pub fn pursue_target(&mut self, target: Vec3) {
-        self.eye = target;
+        match self.tps {
+            false => {
+                self.eye = target;
+            }
+            true => {
+                let forward = self.calc_forward();
+                let distance = 2.5;
+                self.eye = target - forward * distance + glam::Vec3::Y * 0.5;
+            }
+        }
     }
 
     /// 指定したワールド座標がカメラの視界内にあるかを判定する
