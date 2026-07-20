@@ -234,7 +234,7 @@ impl ApplicationHandler for Application {
                 ) {
                     let time = Instant::now().duration_since(self.time).as_secs_f32();
                     // GPUへ時間を伝える
-                    pipelines.update_general_uniform(&gpu.queue, time, world.player.position);
+                    pipelines.update_general_uniform(&gpu.queue, time, world.player.position, world.camera.tps);
 
                     // ワールド状態を進める
                     world.update(dt, &gpu.device, compute, &gpu.queue);

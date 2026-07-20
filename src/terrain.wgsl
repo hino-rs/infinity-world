@@ -263,7 +263,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         } else if wy < SEA_LEVEL {
             blocks[index] = 100u;
         } else {
-            if (tree_r > 0.99) && (wy < h + 5) {
+            if (tree_r > 0.999) && (wy < h + 5) {
                 blocks[index] = 190u;
             } else {
                 blocks[index] = 0u;

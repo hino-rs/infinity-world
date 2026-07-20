@@ -345,9 +345,6 @@ impl Terrain {
 
     // 指定のワールド座標のブロックを返す
     pub fn block_at_world(&self, wx: i32, wy: i32, wz: i32) -> BlockType {
-        // if wy < 0 || wy >= CHUNK_SIZE_I32 {
-        //     return Air;
-        // }
         if wy < 0 {
             return Air;
         }
@@ -359,11 +356,6 @@ impl Terrain {
         let lx = wx.rem_euclid(CHUNK_SIZE_I32);
         let ly = wy.rem_euclid(CHUNK_SIZE_I32);
         let lz = wz.rem_euclid(CHUNK_SIZE_I32);
-
-        // 該当チャンクを探す
-        // let Some(chunk) = self.chunks.iter().find(|c| c.coord == (cx, cz)) else {
-        //     return Air;
-        // };
 
         let Some(chunk) = self.chunks.get(&(cx, cy, cz)) else {
             return Air;

@@ -333,14 +333,18 @@ impl PipelineRegistry {
         }
     }
 
-    pub fn update_general_uniform(&self, queue: &wgpu::Queue, time: f32, current_player_pos: Vec3) {
+    pub fn update_general_uniform(&self, queue: &wgpu::Queue, time: f32, current_player_pos: Vec3, player_tps: bool) {
         queue.write_buffer(
             &self.general_uniform_buffer,
             0,
             bytemuck::bytes_of(&GeneralUniform {
                 time,
                 _pad: [0.0; 3],
-                player_pos: [current_player_pos.x, current_player_pos.y, current_player_pos.z, 1.0],
+                player_pos: if player_tps {
+                        [current_player_pos.x, current_player_pos.y, current_player_pos.z, 1.0] 
+                    } else {
+                        [0.0, -10.0, 0.0, 1.0] // fpsの時は体を隠す
+                    },
             }),
         );
     }

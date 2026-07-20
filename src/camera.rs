@@ -171,12 +171,13 @@ impl Camera {
 
     /// ターゲットに追従
     pub fn pursue_target(&mut self, target: Vec3) {
+        let forward = self.calc_forward();
         match self.tps {
             false => {
                 self.eye = target;
             }
             true => {
-                let forward = self.calc_forward();
+                
                 let distance = 2.5;
                 self.eye = target - forward * distance + glam::Vec3::Y * 0.5;
             }
