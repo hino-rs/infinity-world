@@ -2,7 +2,7 @@ const CHUNK_SIZE_U: u32 = 32;
 const CHUNK_SIZE_I: i32 = i32(CHUNK_SIZE_U);
 const CHUNK_SIZE_F: f32 = f32(CHUNK_SIZE_I);
 const SCALE: f32 = 2048.0;
-const MOUNTAIN_HEIGHT: f32 = 9000.0;
+const MOUNTAIN_HEIGHT: f32 = 256.0;
 const SEA_LEVEL: i32 = 10;
 const DIRT_DEPTH: i32 = 4;
 
@@ -219,6 +219,15 @@ fn get_biome_block(biome_idx: u32, depth: i32, wx: f32, wz: f32, seed: i32) -> u
     }
 }
 
+fn get_wind(wx: f32, wz: f32, seed: i32) -> vec2f {
+    let sx = wx / CLIMATE_SCALE;
+    let sz = wz / CLIMATE_SCALE;
+    let r = simplex_noise(sx, sz, seed + 7);
+    let dir = r * 6.28318530718;
+    let vol = simplex_noise(sx, sz, seed + 7) * 5.0;
+    return vec2f(dir, vol);
+}
+
 // ===================================================================
 // チャンク生成
 // ===================================================================
@@ -241,15 +250,15 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let wx = f32(cx * 32 + i32(x));
     let wz = f32(cz * 32 + i32(z));
 
-    // let sc = scaling(wx, wz);
-    // let r = dw_fbm_value(sc, 1.0, seed);
-    let h = get_height(wx, wz, seed);
-
     let chunk_offset = chunk_idx * (CHUNK_SIZE_U * CHUNK_SIZE_U * CHUNK_SIZE_U);
-
+    
+    // 気温, 湿潤度
     let env = get_climate(wx, wz, seed);
     let biome_idx = get_biome_id(env.x, env.y);
+    let wind = get_wind(wx, wz, seed);
 
+    let h = get_height(wx, wz, seed, wind.x, wind.y, env.y);
+    
     // たまに木を生やす
     let tree_r = hash2d(vec2f(wx, wz), seed + 39);
 
@@ -933,26 +942,24 @@ fn bias(h: f32) -> f32 {
     return h / ((1.0/b-2.0)*(1.0-h)+1.0);
 }
 
-fn get_height(x: f32, z: f32, seed: i32) -> i32 {    
-    let sc = scaling(x, z);
-    let n = ridged(sc.x, sc.y, seed, 2u);
-    let r = n * n * 300.0;
+fn get_height(x: f32, z: f32, seed: i32, wind_dir: f32, wind_speed: f32, mois: f32) -> i32 {    
+    let sx = x / SCALE;
+    let sz = z / SCALE;
 
-    return i32(round(r));
-    // let sc_old = scaling(x, z);
-    // let n = simplex_noise(sc_old.x, sc_old.y, seed);
-    // let sx = sc_old.x;
-    // let sz = sc_old.y;
-    // let o: u32 = u32(n * 10.0);
+    let wind_vec = vec2f(cos(wind_dir), sin(wind_dir));
+    let wind_amp = clamp(wind_speed * 0.5, 0.0, 5.5);
 
-    // var h: f32;
-    // if (n <= 0.2) {
-    //     h = value_noise(sx, sz, seed);
-    // } else if (n <= 0.5) {
-    //     h = fbm(sx, sz, seed, o);
-    // } else {
-    //     h = dw_fbm_value(sc_old, 1.0, seed);
-    // }
+    let dx1 = simplex_noise(sx, sz, seed) - 0.5;
+    let dz1 = simplex_noise(sx, sz, seed + 1) - 0.5;
+    let dx2 = simplex_noise(dx1, dz1, seed + 2) - 0.5;
+    let dz2 = simplex_noise(dx2, sz, seed + 3) - 0.5;
 
-    // return i32(round(h * (MOUNTAIN_HEIGHT*(bias(ridged(sx, sz, seed, o+1))))));
+    let warped = vec2f(sx, sz) + wind_vec * wind_amp * vec2f((dx1 + dx2) / 2.0, (dz1 + dz2) / 2.0);
+    
+    let fbm_h = fbm(warped.x, warped.y, seed + 3, 4u);
+    let ridged_h = ridged(warped.x, warped.y, seed + 4, 4u);
+
+    let h = mix(ridged_h, fbm_h, clamp(mois, 0.0, 1.0)) * MOUNTAIN_HEIGHT;
+
+    return i32(round(h));
 }
