@@ -49,3 +49,114 @@ pub fn calc_humidity(mois: f32, temp: f32) -> (f32, f32) {
 
     (rh, ah)
 }
+
+fn hash2d(p: glam::Vec2, seed: i32) -> f32 {
+    let ip_x = p.x.floor() as i32 as u32;
+    let ip_y = p.y.floor() as i32 as u32;
+    let s = seed as u32;
+
+    let mut vx = ip_x ^ s;
+    let mut vy = ip_y ^ s;
+
+    vx = vx.wrapping_mul(1664525).wrapping_add(1013904223);
+    vy = vy.wrapping_mul(1664525).wrapping_add(1013904223);
+
+    vx = vx.wrapping_add(vy.wrapping_mul(1103515245));
+    vy = vy.wrapping_add(vx.wrapping_mul(1103515245));
+
+    vx ^= vx >> 16;
+    vy ^= vy >> 16;
+
+    vx = vx.wrapping_add(vy.wrapping_mul(1103515245));
+    vy = vy.wrapping_add(vx.wrapping_mul(1103515245));
+
+    vx ^= vx >> 16;
+    vy ^= vy >> 16;
+
+    (vx as f64 * (1.0 / 4294967295.0)) as f32
+}
+
+fn get_grad(p: glam::Vec2, seed: i32) -> glam::Vec2 {
+    let h = ((hash2d(p, seed) * 8.0) as u32) & 7;
+    match h {
+        0 => glam::Vec2::new(1.0, 0.0),
+        1 => glam::Vec2::new(-1.0, 0.0),
+        2 => glam::Vec2::new(0.0, 1.0),
+        3 => glam::Vec2::new(0.0, -1.0),
+        4 => glam::Vec2::new(0.70710678, 0.70710678),
+        5 => glam::Vec2::new(-0.70710678, 0.70710678),
+        6 => glam::Vec2::new(0.70710678, -0.70710678),
+        _ => glam::Vec2::new(-0.70710678, -0.70710678),
+    }
+}
+
+pub fn simplex_noise(x: f32, z: f32, seed: i32) -> f32 {
+    let f2 = 0.366025403_f32;
+    let g2 = 0.211324865_f32;
+
+    let p = glam::Vec2::new(x, z);
+    let s = (p.x + p.y) * f2;
+    let ips = glam::Vec2::new((p.x + s).floor(), (p.y + s).floor());
+    let t = (ips.x + ips.y) * g2;
+    let p0 = ips - glam::Vec2::new(t, t);
+    let d0 = p - p0;
+
+    let i1 = if d0.x > d0.y {
+        glam::Vec2::new(1.0, 0.0)
+    } else {
+        glam::Vec2::new(0.0, 1.0)
+    };
+
+    let d1 = d0 - i1 + glam::Vec2::new(g2, g2);
+    let d2 = d0 - glam::Vec2::new(1.0, 1.0) + glam::Vec2::new(2.0 * g2, 2.0 * g2);
+
+    let g0 = get_grad(ips, seed);
+    let g1 = get_grad(ips + i1, seed);
+    let g2 = get_grad(ips + glam::Vec2::new(1.0, 1.0), seed);
+
+    let mut n0 = 0.0;
+    let mut n1 = 0.0;
+    let mut n2 = 0.0;
+
+    let t0 = 0.5 - d0.dot(d0);
+    if t0 > 0.0 {
+        let t0_2 = t0 * t0;
+        n0 = t0_2 * t0_2 * g0.dot(d0);
+    }
+
+    let t1 = 0.5 - d1.dot(d1);
+    if t1 > 0.0 {
+        let t1_2 = t1 * t1;
+        n1 = t1_2 * t1_2 * g1.dot(d1);
+    }
+
+    let t2 = 0.5 - d2.dot(d2);
+    if t2 > 0.0 {
+        let t2_2 = t2 * t2;
+        n2 = t2_2 * t2_2 * g2.dot(d2);
+    }
+
+    let val = 70.0 * (n0 + n1 + n2);
+    val * 0.5 + 0.5
+}
+
+const CLIMATE_SCALE: f32 = 65536.0;
+const MIN_TEMP: f32 = -30.0;
+const MAX_TEMP: f32 = 30.0;
+
+pub fn get_climate(wx: f32, wz: f32, seed: i32) -> (f32, f32) {
+    let sc_x = wx / CLIMATE_SCALE;
+    let sc_z = wz / CLIMATE_SCALE;
+    let r = simplex_noise(sc_x, sc_z, seed + 5);
+    let temp = MIN_TEMP + r * (MAX_TEMP - MIN_TEMP) + 10.0;
+    (temp, r)
+}
+
+pub fn get_wind(wx: f32, wz: f32, seed: i32) -> (f32, f32) {
+    let sc_x = wx / CLIMATE_SCALE;
+    let sc_z = wz / CLIMATE_SCALE;
+    let r = simplex_noise(sc_x, sc_z, seed + 7);
+    let dir = r * 6.28318530718_f32;
+    let vol = simplex_noise(sc_x, sc_z, seed + 7) * 5.0;
+    (dir, vol)
+}

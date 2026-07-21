@@ -11,14 +11,16 @@ struct ChunkUniforms {
     seed: i32,
 }
 
+const CLIMATE_SCALE: f32 = 65536.0;
+fn get_climate(wx: f32, wz: f32, seed: i32) -> vec2f {
+    let sc = vec2f(wx, wz) / CLIMATE_SCALE;
+    let r = fbm(sc.x, sc.y, seed + 5, 1u);
+    let temp = mix(-30.0, 30.0, r) + 10.0;
+    return vec2f(temp, r);
+}
+
 @group(0) @binding(0) var<storage, read> uniforms: array<ChunkUniforms>;
 @group(0) @binding(1) var<storage, read_write> blocks: array<u32>;
-@group(0) @binding(2) var<storage, read_write> env_storage: array<EnvData>;
-
-struct EnvData {
-    temp_and_mois: u32, // 気温と湿潤度
-    wind_dir_and_speed: u32, // 風の向きと速度
-}
 
 
 fn calc_humidity(mois: f32, temp: f32) -> vec2f {
@@ -245,9 +247,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
 
     let chunk_offset = chunk_idx * (CHUNK_SIZE_U * CHUNK_SIZE_U * CHUNK_SIZE_U);
 
-    let env_data = env_storage[chunk_idx];
-    let env = unpack2x16float(env_data.temp_and_mois);
-    let wind = unpack2x16float(env_data.wind_dir_and_speed);
+    let env = get_climate(wx, wz, seed);
     let biome_idx = get_biome_id(env.x, env.y);
 
     // たまに木を生やす

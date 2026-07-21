@@ -1,4 +1,4 @@
-use std::sync::{Arc, mpsc};
+use std::sync::Arc;
 
 use web_time::Instant;
 use wgpu_text::glyph_brush::ab_glyph::FontArc;
@@ -9,14 +9,13 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
 use crate::camera::CameraGpu;
-use crate::compute::{ChunkUniforms, Compute};
-use crate::consts::BATCH_SIZE;
+use crate::compute::Compute;
 use crate::fps::FpsCounter;
 use crate::gpu::GpuContext;
 use crate::pipeline::PipelineRegistry;
 use crate::render_info::RenderInfo;
 use crate::world::World;
-use half::f16;
+
 
 static FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-VariableFont_wght.ttf");
 
@@ -52,9 +51,6 @@ pub struct Application {
     pub frames: u128,
     option: AppOption,
     pub compute: Option<Compute>,
-    pub gpu_env_in_progress: bool,
-    pub env_rx: mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>,
-    pub env_tx: mpsc::Sender<Result<(), wgpu::BufferAsyncError>>,
     pub current_temp: f32,
     pub current_mois: f32,
     pub current_wind_dir: f32,
@@ -65,7 +61,6 @@ impl Application {
     /// アプリケーションを初期化します。
     /// オプションを渡さない場合はデフォルトの設定になります。
     pub fn new(option: Option<AppOption>) -> Self {
-        let (env_tx, env_rx) = mpsc::channel();
         Self {
             window: None,
             gpu: None,
@@ -81,9 +76,6 @@ impl Application {
             frames: 0,
             option: option.unwrap_or_default(),
             compute: None,
-            gpu_env_in_progress: false,
-            env_rx,
-            env_tx,
 
             current_temp: 0.0,
             current_mois: 0.0,
@@ -242,50 +234,13 @@ impl ApplicationHandler for Application {
                     let _delta = self.fps.tick();
                     let _ = gpu.device.poll(wgpu::PollType::Poll);
 
-                    if self.gpu_env_in_progress {
-                        match self.env_rx.try_recv() {
-                            Ok(Ok(())) => {
-                                let envs = compute.read_env();
-                                if !envs.is_empty() {
-                                    let packed = envs[0];
-                                    // --- 気温と湿潤度 ---
-                                    let temp_bits = (packed.temp_and_mois & 0xffff) as u16;
-                                    let mois_bits = ((packed.temp_and_mois >> 16) & 0xffff) as u16;
-                                    self.current_temp = f16::from_bits(temp_bits).to_f32();
-                                    self.current_mois = f16::from_bits(mois_bits).to_f32();
-                                    // --- 風の向きと速度 ---
-                                    let wind_dir_bits = (packed.wind_dir_and_speed & 0xffff) as u16;
-                                    let wind_speed_bits =
-                                        ((packed.wind_dir_and_speed >> 16) & 0xffff) as u16;
-                                    self.current_wind_dir = f16::from_bits(wind_dir_bits).to_f32();
-                                    self.current_wind_speed = f16::from_bits(wind_speed_bits).to_f32();
-                                }
-                                self.gpu_env_in_progress = false;
-                            }
-                            Ok(Err(e)) => {
-                                println!("GPU env generation mapping failed: {:?}", e);
-                                self.gpu_env_in_progress = false;
-                            }
-                            Err(mpsc::TryRecvError::Empty) => {
-                                // まだGPU計算中。何もしない（前回の値を保持）
-                            }
-                            Err(mpsc::TryRecvError::Disconnected) => {
-                                panic!("GPU env channel disconnected!");
-                            }
-                        }
-                    }
-
-                    if !self.gpu_env_in_progress {
-                        let cp = world.player.current_chunk_pos();
-                        let mut chunk_uniforms = vec![ChunkUniforms::new(world.seed); BATCH_SIZE];
-                        chunk_uniforms[0] = ChunkUniforms {
-                            chunk_pos: [cp.x, cp.y, cp.z],
-                            seed: world.seed,
-                        };
-                        compute.update_env(&gpu.device, &gpu.queue, &chunk_uniforms);
-                        compute.request_env_async(self.env_tx.clone());
-                        self.gpu_env_in_progress = true;
-                    }
+                    let player_pos = world.player.position;
+                    let (temp, mois) = crate::utils::get_climate(player_pos.x, player_pos.z, world.seed);
+                    let (wind_dir, wind_speed) = crate::utils::get_wind(player_pos.x, player_pos.z, world.seed);
+                    self.current_temp = temp;
+                    self.current_mois = mois;
+                    self.current_wind_dir = wind_dir;
+                    self.current_wind_speed = wind_speed;
 
                     gpu.render(
                         render,
