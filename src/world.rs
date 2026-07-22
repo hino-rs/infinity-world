@@ -14,7 +14,7 @@ pub struct World {
     pub player_controller: PlayerController,
     pub camera: Camera,
     pub terrain: Terrain,
-    pub seed: i32,
+    pub seed: u32,
     pub ticks: u16,
     
 }
@@ -25,7 +25,7 @@ impl World {
     /// 1. アスペクト比: カメラ生成に必要です
     /// 2. 感度: 同上
     pub fn new(aspect: f32, sensitivity: f32, device: &wgpu::Device) -> World {
-        let seed = rand::random::<i32>();
+        let seed = getrandom::u32().unwrap();
         let initial_position = Vec3::new(0.0, 100.0, 0.0);
 
         let camera = Camera::new(

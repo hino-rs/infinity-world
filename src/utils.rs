@@ -50,10 +50,10 @@ pub fn calc_humidity(mois: f32, temp: f32) -> (f32, f32) {
     (rh, ah)
 }
 
-fn hash2d(p: glam::Vec2, seed: i32) -> f32 {
+fn hash2d(p: glam::Vec2, seed: u32) -> f32 {
     let ip_x = p.x.floor() as i32 as u32;
     let ip_y = p.y.floor() as i32 as u32;
-    let s = seed as u32;
+    let s = seed;
 
     let mut vx = ip_x ^ s;
     let mut vy = ip_y ^ s;
@@ -76,7 +76,7 @@ fn hash2d(p: glam::Vec2, seed: i32) -> f32 {
     (vx as f64 * (1.0 / 4294967295.0)) as f32
 }
 
-fn get_grad(p: glam::Vec2, seed: i32) -> glam::Vec2 {
+fn get_grad(p: glam::Vec2, seed: u32) -> glam::Vec2 {
     let h = ((hash2d(p, seed) * 8.0) as u32) & 7;
     match h {
         0 => glam::Vec2::new(1.0, 0.0),
@@ -90,7 +90,7 @@ fn get_grad(p: glam::Vec2, seed: i32) -> glam::Vec2 {
     }
 }
 
-pub fn simplex_noise(x: f32, z: f32, seed: i32) -> f32 {
+pub fn simplex_noise(x: f32, z: f32, seed: u32) -> f32 {
     let f2 = 0.366025403_f32;
     let g2 = 0.211324865_f32;
 
@@ -144,19 +144,19 @@ const CLIMATE_SCALE: f32 = 65536.0;
 const MIN_TEMP: f32 = -30.0;
 const MAX_TEMP: f32 = 30.0;
 
-pub fn get_climate(wx: f32, wz: f32, seed: i32) -> (f32, f32) {
+pub fn get_climate(wx: f32, wz: f32, seed: u32) -> (f32, f32) {
     let sc_x = wx / CLIMATE_SCALE;
     let sc_z = wz / CLIMATE_SCALE;
-    let r = simplex_noise(sc_x, sc_z, seed + 5);
+    let r = simplex_noise(sc_x, sc_z, seed.wrapping_add(5));
     let temp = MIN_TEMP + r * (MAX_TEMP - MIN_TEMP) + 10.0;
     (temp, r)
 }
 
-pub fn get_wind(wx: f32, wz: f32, seed: i32) -> (f32, f32) {
+pub fn get_wind(wx: f32, wz: f32, seed: u32) -> (f32, f32) {
     let sc_x = wx / CLIMATE_SCALE;
     let sc_z = wz / CLIMATE_SCALE;
-    let r = simplex_noise(sc_x, sc_z, seed + 7);
+    let r = simplex_noise(sc_x, sc_z, seed.wrapping_add(7));
     let dir = r * 6.28318530718_f32;
-    let vol = simplex_noise(sc_x, sc_z, seed + 7) * 5.0;
+    let vol = simplex_noise(sc_x, sc_z, seed.wrapping_add(7)) * 5.0;
     (dir, vol)
 }

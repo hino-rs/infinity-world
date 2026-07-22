@@ -83,26 +83,11 @@ impl Application {
             current_wind_speed: 0.0,
         }
     }
-}
-
-impl ApplicationHandler for Application {
-    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    pub fn init_with_gpu(&mut self, window: Arc<Window>, gpu: GpuContext) {
         if self.window.is_some() {
             return;
         }
 
-        // ウィンドウ作成
-        let window = Arc::new(
-            event_loop
-                .create_window(if self.option.fullscreen {
-                    // フルスクリーン
-                    Window::default_attributes()
-                        .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
-                } else {
-                    Window::default_attributes()
-                })
-                .unwrap(),
-        );
         window
             .set_cursor_grab(winit::window::CursorGrabMode::Confined) // カーソルをウィンドウ内に閉じ込める
             .ok();
@@ -110,12 +95,6 @@ impl ApplicationHandler for Application {
 
         // フォント
         let font = FontArc::try_from_slice(FONT_BYTES).expect("フォント読み込み失敗");
-        // GPU周り
-        let gpu = pollster::block_on(GpuContext::new(
-            Arc::clone(&window),
-            self.option.vsync,
-            self.option.fullpower,
-        ));
         // パイプライン
         let pipelines = PipelineRegistry::new(&gpu.device, &gpu.config);
         // ワールド
@@ -150,6 +129,36 @@ impl ApplicationHandler for Application {
         self.render = Some(render);
         self.brush = Some(brush);
         self.compute = Some(compute);
+    }
+}
+
+impl ApplicationHandler for Application {
+    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        if self.window.is_some() {
+            return;
+        }
+
+        // ウィンドウ作成
+        let window = Arc::new(
+            event_loop
+                .create_window(if self.option.fullscreen {
+                    // フルスクリーン
+                    Window::default_attributes()
+                        .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
+                } else {
+                    Window::default_attributes()
+                })
+                .unwrap(),
+        );
+
+        // GPU周り
+        let gpu = pollster::block_on(GpuContext::new(
+            Arc::clone(&window),
+            self.option.vsync,
+            self.option.fullpower,
+        ));
+
+        self.init_with_gpu(window, gpu);
     }
 
     fn window_event(
@@ -278,3 +287,12 @@ impl ApplicationHandler for Application {
         }
     }
 }
+
+impl Application {
+    pub fn with_precreated(window: Arc<Window>, gpu: GpuContext) -> Self {
+        let mut app = Self::new(None);
+        app.init_with_gpu(window, gpu);
+        app
+    }
+}
+

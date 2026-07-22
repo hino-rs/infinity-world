@@ -105,7 +105,7 @@ impl Terrain {
     pub fn add_chunks(
         &mut self,
         device: &wgpu::Device,
-        seed: i32,
+        seed: u32,
         center: IVec3,
         compute: &Compute,
         queue: &wgpu::Queue,

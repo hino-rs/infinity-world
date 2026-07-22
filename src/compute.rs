@@ -20,7 +20,7 @@ use crate::{
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct ChunkUniforms {
     pub chunk_pos: [i32; 3],
-    pub seed: i32,
+    pub seed: u32,
 }
 
 

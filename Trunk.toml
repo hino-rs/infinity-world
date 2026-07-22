@@ -1,0 +1,17 @@
+[build]
+target = "index.html"
+dist = "dist"
+filehash = false
+
+[serve]
+port = 8080
+open = false
+headers = { "Cross-Origin-Opener-Policy" = "same-origin", "Cross-Origin-Embedder-Policy" = "require-corp" }
+
+[[hooks]]
+stage = "post_build"
+command = "powershell"
+command_arguments = [
+    "-Command",
+    "Get-ChildItem -Path target, dist -Filter infinity-world.js -Recurse | ForEach-Object { (Get-Content $_.FullName) -replace '\"./infinity-world_bg.js\": import0,', '\"./infinity-world_bg.js\": import0, \"__wbindgen_placeholder__\": { __wbindgen_describe: function(){}, __wbindgen_describe_cast: function(){} },' -replace 'wasm\\.__wbindgen_start\\(thread_stack_size\\);', 'if (typeof thread_stack_size === \"undefined\") thread_stack_size = 1048576; wasm.__wbindgen_start(thread_stack_size);' | Set-Content $_.FullName }"
+]

@@ -26,7 +26,13 @@ pub struct GpuContext {
 impl GpuContext {
     /// GPU初期化
     pub async fn new(window: Arc<Window>, vsync: bool, fullpower: bool) -> Self {
-        let size = window.inner_size();
+        let mut size = window.inner_size();
+        // WASM: キャンバスがレイアウト前だとサイズが0になることがある
+        if size.width == 0 || size.height == 0 {
+            log::warn!("Window inner_size is {}x{}, using fallback 800x600", size.width, size.height);
+            size.width = size.width.max(800);
+            size.height = size.height.max(600);
+        }
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -48,20 +54,40 @@ impl GpuContext {
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
-            .await
-            .unwrap();
+            .await;
+
+        let adapter = match adapter {
+            Ok(a) => a,
+            Err(e) => {
+                log::warn!("HighPerformance adapter failed ({:?}), trying fallback adapter...", e);
+                instance
+                    .request_adapter(&wgpu::RequestAdapterOptions {
+                        power_preference: wgpu::PowerPreference::LowPower,
+                        compatible_surface: Some(&surface),
+                        force_fallback_adapter: true,
+                    })
+                    .await
+                    .expect("Failed to find any WGPU adapter")
+            }
+        };
+
+        let limits = if cfg!(target_arch = "wasm32") {
+            wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits())
+        } else {
+            wgpu::Limits::default()
+        };
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
+                required_limits: limits,
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
             })
             .await
-            .unwrap();
+            .expect("Failed to request WGPU device");
 
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps.formats[0];

@@ -45,50 +45,103 @@ fn main() {
     event_loop.run_app(&mut app).unwrap();
 }
 
-// use tract_onnx::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_futures::js_sys;
 
-// fn main() -> TractResult<()> {
-//     println!("Loading tiny_terrain.onnx model...");
-//     // ONNXモデルをロード
-//     let model = tract_onnx::onnx()
-//         // 入力元のONNXファイルをロード
-//         .model_for_path("ai/tiny_terrain.onnx")?
-//         // 入力のテンソルの形状(Shape)と型(Type)を定義
-//         // 今回のモデルは [batch, channel, height, width] = [1, 1, 16, 16] の f32
-//         .with_input_fact(0, f32::fact(&[1, 1, 16, 16]).into())?
-//         // 最適化を実行
-//         .into_optimized()?
-//         // 推論を実行するための runnable な状態にする
-//         .into_runnable()?;
+#[cfg(target_arch = "wasm32")]
+pub use wasm_bindgen_rayon::init_thread_pool;
 
-//     // 入力テンソルの作成
-//     // tract_ndarrayを使って、[1, 1, 16, 16]の入力データを用意します
-//     // テスト用にグラデーション値を埋め込みます
-//     let input_array = tract_ndarray::Array4::from_shape_fn((1, 1, 16, 16), |(_, _, y, x)| {
-//         (y + x) as f32 / 30.0
-//     });
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen(start)]
+pub async fn run() {
+    console_error_panic_hook::set_once();
 
-//     println!("--- 入力データの一部 (16x16の最初の行) ---");
-//     for x in 0..16 {
-//         print!("{:.3} ", input_array[[0, 0, 0, x]]);
-//     }
-//     println!("\n");
+    if let Some(web_window) = web_sys::window() {
+        let _ = wasm_logger::init(wasm_logger::Config::default());
+        use std::sync::Arc;
+        use winit::window::Window;
 
-//     let input_tensor: Tensor = input_array.into();
+        log::info!("[Start] Initializing WebAssembly app...");
 
-//     // 推論の実行
-//     let result = model.run(tvec!(input_tensor.into()))?;
+        let concurrency = (web_window.navigator().hardware_concurrency() as usize).min(4).max(1);
+        let is_isolated = js_sys::Reflect::get(&web_window, &"crossOriginIsolated".into())
+            .ok()
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
-//     // 出力結果の取り出し
-//     let output_tensor = &result[0];
-//     let output_array = output_tensor.to_array_view::<f32>()?;
+        if is_isolated && concurrency > 1 {
+            log::info!("[Step 1] Initializing Rayon thread pool (concurrency={})...", concurrency);
+            if let Err(e) = wasm_bindgen_rayon::init_thread_pool(concurrency).await {
+                log::error!("[Step 1 Error] Failed to initialize rayon thread pool: {:?}", e);
+            }
+            log::info!("[Step 1 Success] Rayon thread pool initialized.");
+        } else {
+            log::info!("[Step 1] CrossOriginIsolated is false or concurrency=1; skipping thread pool initialization.");
+        }
 
-//     println!("--- 出力データの一部 (16x16の最初の行) ---");
-//     for x in 0..16 {
-//         print!("{:.3} ", output_array[[0, 0, 0, x]]);
-//     }
-//     println!("\n");
+        use winit::platform::web::EventLoopExtWebSys;
+        use winit::platform::web::WindowAttributesExtWebSys;
+        use wasm_bindgen::JsCast;
 
-//     println!("モデルの実行テストが成功しました！");
-//     Ok(())
-// }
+        log::info!("[Step 2] Creating EventLoop...");
+        let event_loop = match EventLoop::new() {
+            Ok(el) => el,
+            Err(e) => {
+                log::error!("[Step 2 Error] Failed to create EventLoop: {:?}", e);
+                return;
+            }
+        };
+
+        log::info!("[Step 3] Creating canvas...");
+        let canvas = web_window
+            .document()
+            .and_then(|doc| doc.create_element("canvas").ok())
+            .and_then(|c| c.dyn_into::<web_sys::HtmlCanvasElement>().ok());
+
+        if let Some(canvas) = &canvas {
+            // ブラウザウィンドウサイズを取得してキャンバスに明示的に設定
+            // これがないと window.inner_size() が 0x0 を返す
+            let dpr = web_window.device_pixel_ratio();
+            let client_width = web_window.inner_width()
+                .ok().and_then(|v| v.as_f64()).unwrap_or(800.0);
+            let client_height = web_window.inner_height()
+                .ok().and_then(|v| v.as_f64()).unwrap_or(600.0);
+            canvas.set_width((client_width * dpr) as u32);
+            canvas.set_height((client_height * dpr) as u32);
+            let style = canvas.style();
+            let _ = style.set_property("width", "100%");
+            let _ = style.set_property("height", "100%");
+
+            if let Some(doc) = web_window.document() {
+                if let Some(body) = doc.body() {
+                    let _ = body.append_child(canvas);
+                }
+            }
+        }
+
+        log::info!("[Step 4] Creating window...");
+        let window_attrs = Window::default_attributes()
+            .with_title("Infinity World")
+            .with_canvas(canvas);
+
+        let window = match event_loop.create_window(window_attrs) {
+            Ok(w) => Arc::new(w),
+            Err(e) => {
+                log::error!("[Step 4 Error] Failed to create window: {:?}", e);
+                return;
+            }
+        };
+
+        log::info!("[Step 5] Creating GPU Context...");
+        let gpu = crate::gpu::GpuContext::new(Arc::clone(&window), false, false).await;
+        log::info!("[Step 5 Success] GPU Context created.");
+
+        log::info!("[Step 6] Spawning application loop...");
+        let app = Application::with_precreated(window, gpu);
+        event_loop.spawn_app(app);
+        log::info!("[Step 6 Success] App spawned.");
+    }
+}
+
